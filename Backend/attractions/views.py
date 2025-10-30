@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from .models import Attraction
 from .serializers import AttractionDetailSerializer
 
+
 class AttractionDetailView(APIView):
     def get(self, request, pk):
         attraction = get_object_or_404(Attraction, pk=pk)
