@@ -1,0 +1,12 @@
+# Core Django dependencies
+Django==5.2.7
+djangorestframework==3.15.2
+
+# CORS handling for frontend communication
+django-cors-headers==4.6.0
+
+# Environment variables management
+python-dotenv==1.1.1
+
+# HTTP requests for external APIs (TripAdvisor)
+requests==2.32.4
