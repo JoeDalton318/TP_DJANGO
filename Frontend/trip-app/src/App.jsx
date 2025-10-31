@@ -4,6 +4,9 @@ import { UserProfileProvider, useUserProfile } from './contexts/UserProfileConte
 import { CompilationProvider } from './contexts/CompilationContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
+// Components
+import Navbar from './components/Navbar';
+
 // Pages
 import LandingPage from './pages/LandingPage';
 import HomePage from './pages/HomePage';
@@ -74,6 +77,7 @@ const PublicRoute = ({ children }) => {
 const AppRoutes = () => {
   return (
     <Router>
+      <Navbar />
       <Routes>
         {/* Routes publiques (pour utilisateurs non connectés) */}
         <Route 

@@ -27,6 +27,9 @@ urlpatterns = [
     path('suggestions/', views.search_suggestions, name='suggestions'),
     path('categories/', views.categories, name='categories'),
     path('countries/', views.countries, name='countries'),
+    path('cuisines/', views.cuisines, name='cuisines'),
+    path('hotel-styles/', views.hotel_styles, name='hotel_styles'),
+    path('types/', views.attraction_types, name='attraction_types'),
     
     # Endpoints de test TripAdvisor
     path('test/tripadvisor/search/', views.test_tripadvisor_search, name='test_search'),

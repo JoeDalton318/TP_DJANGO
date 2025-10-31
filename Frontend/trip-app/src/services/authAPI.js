@@ -1,15 +1,10 @@
 // Service API pour l'authentification utilisateur
+import { isTokenExpired, clearExpiredTokens, getAuthHeaders as getAuthHeadersUtil } from '../utils/tokenUtils';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 // Helper pour inclure le token dans les headers
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('access_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
+const getAuthHeaders = getAuthHeadersUtil;
 
 // Helper pour gérer les erreurs de response
 const handleResponse = async (response) => {
@@ -169,7 +164,15 @@ export const authAPI = {
   // Vérifier si l'utilisateur est connecté
   isAuthenticated: () => {
     const token = localStorage.getItem('access_token');
-    return !!token;
+    if (!token) return false;
+    
+    // Vérifier si le token n'est pas expiré
+    if (isTokenExpired(token)) {
+      clearExpiredTokens();
+      return false;
+    }
+    
+    return true;
   },
 
   // Obtenir le token d'accès

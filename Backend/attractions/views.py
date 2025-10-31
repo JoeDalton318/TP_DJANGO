@@ -1,13 +1,21 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework import status, viewsets, filters, permissions
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q, Count, Avg
 from attractions.tripadvisor_service import tripadvisor_service
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from .models import UserProfile, Compilation, CompilationItem
+from .serializers import (
+    UserProfileSerializer, UserProfileCreateSerializer,
+    CompilationSerializer, CompilationListSerializer, CompilationCreateSerializer,
+    CompilationItemSerializer, CompilationStatsSerializer, UserProfileStatsSerializer
+)
 import logging
 import requests
 
@@ -71,6 +79,7 @@ class AttractionSearchView(APIView):
     API pour rechercher des attractions avec filtres
     Utilise: GET /location/search et GET /location/{id}/details
     """
+    permission_classes = [AllowAny]  # Accessible sans authentification
     
     def get(self, request):
         try:
@@ -175,6 +184,7 @@ class AttractionDetailView(APIView):
     API pour récupérer les détails d'une attraction
     Utilise: GET /location/{location_id}/details et GET /location/{location_id}/photos
     """
+    permission_classes = [AllowAny]  # Accessible sans authentification
     
     def get(self, request, tripadvisor_id):
         try:
@@ -202,6 +212,7 @@ class AttractionDetailView(APIView):
 # ============= APIs UTILITAIRES =============
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def search_suggestions(request):
     """
     API pour obtenir des suggestions de recherche
@@ -235,6 +246,7 @@ def search_suggestions(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def categories(request):
     """
     API pour obtenir les catégories d'attractions disponibles
@@ -256,6 +268,7 @@ def categories(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def countries(request):
     """
     API pour obtenir la liste des pays disponibles
@@ -679,6 +692,7 @@ class AttractionNearbyView(APIView):
 # ============= FONCTIONS UTILITAIRES =============
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def search_suggestions(request):
     """
     API pour obtenir des suggestions de recherche via TripAdvisor API
@@ -714,6 +728,7 @@ def search_suggestions(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def categories(request):
     """
     API pour obtenir les catégories d'attractions disponibles
@@ -745,6 +760,7 @@ def categories(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def countries(request):
     """
     API pour obtenir la liste des pays disponibles avec couverture mondiale
@@ -804,6 +820,7 @@ def countries(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def cuisines(request):
     """
     API pour obtenir la liste des cuisines disponibles
@@ -835,6 +852,7 @@ def cuisines(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def hotel_styles(request):
     """
     API pour obtenir la liste des styles d'hôtels disponibles
@@ -861,6 +879,7 @@ def hotel_styles(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def attraction_types(request):
     """
     API pour obtenir la liste des types d'attractions disponibles
@@ -994,18 +1013,6 @@ class AttractionPhotosView(APIView):
 
 # ===== VIEWSETS POUR PERSONNE 1 & 3 =====
 
-from rest_framework import viewsets, filters, permissions
-from rest_framework.decorators import action
-from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q, Count, Avg
-from .models import UserProfile, Compilation, CompilationItem
-from .serializers import (
-    UserProfileSerializer, UserProfileCreateSerializer,
-    CompilationSerializer, CompilationListSerializer, CompilationCreateSerializer,
-    CompilationItemSerializer, CompilationStatsSerializer, UserProfileStatsSerializer
-)
-
-
 class UserProfileViewSet(viewsets.ModelViewSet):
     """
     ViewSet pour gérer les profils utilisateur (Personne 1)
@@ -1044,6 +1051,18 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Associer automatiquement le profil à l'utilisateur connecté"""
         serializer.save(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """Créer un profil et retourner les données complètes"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        # Retourner les données complètes avec l'ID
+        instance = serializer.instance
+        output_serializer = UserProfileSerializer(instance)
+        headers = self.get_success_headers(serializer.data)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     @action(detail=False, methods=['get'])
     def stats(self, request):
@@ -1094,10 +1113,10 @@ class CompilationViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description', 'user_profile__name']
     ordering_fields = ['name', 'created_at', 'updated_at', 'estimated_budget']
     ordering = ['-updated_at']
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
-        """Filtrer les compilations par utilisateur connecté"""
+        """Filtrer les compilations par utilisateur connecté ou retourner queryset vide si non connecté"""
         if not self.request.user.is_authenticated:
             return Compilation.objects.none()
             
@@ -1113,30 +1132,18 @@ class CompilationViewSet(viewsets.ModelViewSet):
             return CompilationCreateSerializer
         return CompilationSerializer
     
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Filtrer par profil utilisateur si spécifié
-        user_profile_id = self.request.query_params.get('user_profile')
-        if user_profile_id:
-            queryset = queryset.filter(user_profile_id=user_profile_id)
-        
-        # Filtrer par statut budget
-        budget_status = self.request.query_params.get('budget_status')
-        if budget_status in ['under_budget', 'on_budget', 'over_budget']:
-            # Nécessite calcul côté Python (pas optimisé pour gros volumes)
-            filtered_ids = []
-            for compilation in queryset:
-                if compilation.budget_status == budget_status:
-                    filtered_ids.append(compilation.id)
-            queryset = queryset.filter(id__in=filtered_ids)
-        
-        return queryset
-    
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def add_attraction(self, request, pk=None):
         """Ajouter une attraction à la compilation"""
         compilation = self.get_object()
+        
+        # Vérifier que l'utilisateur est propriétaire de la compilation
+        if compilation.user_profile.user != request.user:
+            return Response(
+                {'error': 'Vous n\'avez pas la permission de modifier cette compilation'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         attraction_id = request.data.get('attraction_id')
         
         if not attraction_id:
@@ -1167,10 +1174,18 @@ class CompilationViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=True, methods=['delete'])
+    @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
     def remove_attraction(self, request, pk=None):
         """Retirer une attraction de la compilation"""
         compilation = self.get_object()
+        
+        # Vérifier que l'utilisateur est propriétaire de la compilation
+        if compilation.user_profile.user != request.user:
+            return Response(
+                {'error': 'Vous n\'avez pas la permission de modifier cette compilation'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         attraction_id = request.data.get('attraction_id')
         
         if not attraction_id:
@@ -1241,6 +1256,9 @@ class CompilationItemViewSet(viewsets.ModelViewSet):
     filterset_fields = ['compilation', 'priority', 'is_visited']
     ordering_fields = ['priority', 'added_at', 'effective_cost']
     ordering = ['priority', '-added_at']
+    permission_classes = [AllowAny]
+    ordering_fields = ['priority', 'added_at', 'effective_cost']
+    ordering = ['priority', '-added_at']
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -1252,10 +1270,18 @@ class CompilationItemViewSet(viewsets.ModelViewSet):
         
         return queryset
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def mark_visited(self, request, pk=None):
         """Marquer un item comme visité"""
         item = self.get_object()
+        
+        # Vérifier que l'utilisateur est propriétaire de la compilation
+        if item.compilation.user_profile.user != request.user:
+            return Response(
+                {'error': 'Vous n\'avez pas la permission de modifier cet item'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         item.is_visited = True
         item.visited_at = timezone.now()
         item.save()

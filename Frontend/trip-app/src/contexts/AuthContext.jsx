@@ -23,19 +23,21 @@ export const AuthProvider = ({ children }) => {
       console.log('🔑 Token présent:', !!localStorage.getItem('access_token'));
       
       try {
+        // Vérifier d'abord si l'utilisateur est vraiment authentifié (token valide)
         if (authAPI.isAuthenticated()) {
           console.log('📥 Tentative de récupération des données utilisateur...');
           const userData = await authAPI.getCurrentUser();
           console.log('✅ Données utilisateur récupérées:', userData);
           setUser(userData.user);
         } else {
-          console.log('❌ Pas de token valide');
+          console.log('❌ Pas de token valide ou token expiré');
         }
       } catch (error) {
         console.error('💥 Erreur lors de l\'initialisation de l\'authentification:', error);
         // Token invalide, nettoyer le storage
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        setUser(null);
       } finally {
         setLoading(false);
         console.log('🏁 Initialisation terminée');
@@ -43,7 +45,6 @@ export const AuthProvider = ({ children }) => {
     };
 
     initializeAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Inscription
@@ -134,10 +135,19 @@ export const AuthProvider = ({ children }) => {
 
   // Vérifier si l'utilisateur est connecté
   const isAuthenticated = () => {
-    const hasUser = !!user;
     const hasToken = authAPI.isAuthenticated();
-    console.log(`🔍 isAuthenticated check - User: ${hasUser}, Token: ${hasToken}, Result: ${hasUser && hasToken}`);
-    return hasUser && hasToken;
+    const hasUser = !!user;
+    
+    // Si pas de token valide, nettoyer l'utilisateur en mémoire
+    if (!hasToken && hasUser) {
+      console.log('🧹 Token invalide détecté, nettoyage utilisateur en mémoire');
+      setUser(null);
+      return false;
+    }
+    
+    const result = hasUser && hasToken;
+    console.log(`🔍 isAuthenticated check - User: ${hasUser}, Token: ${hasToken}, Result: ${result}`);
+    return result;
   };
 
   // Obtenir le profil utilisateur (UserProfile du modèle Django)

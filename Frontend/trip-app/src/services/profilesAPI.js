@@ -2,22 +2,9 @@
  * Service API pour la gestion des profils utilisateur (Personne 1)
  * Remplace localStorage par de vraies requêtes API
  */
+import { getAuthHeaders } from '../utils/tokenUtils';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
-
-// Helper pour inclure le token dans les headers
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('access_token');
-  console.log('🔑 Récupération du token:', token ? `${token.substring(0, 20)}...` : 'AUCUN TOKEN');
-  
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-  
-  console.log('📋 Headers préparés:', headers);
-  return headers;
-};
 
 // Helper pour gérer les erreurs de response
 const handleResponse = async (response) => {

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Configuration de base pour l'API Django
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -25,7 +25,7 @@ export const attractionsAPI = {
   // Recherche d'attractions avec filtres
   searchAttractions: async (params = {}) => {
     try {
-      const response = await api.get('/attractions/search/', { params });
+      const response = await api.get('/api/attractions/search/', { params });
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la recherche: ${error.message}`);
@@ -35,7 +35,7 @@ export const attractionsAPI = {
   // Attractions populaires
   getPopularAttractions: async (params = {}) => {
     try {
-      const response = await api.get('/attractions/popular/', { params });
+      const response = await api.get('/api/attractions/popular/', { params });
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des attractions populaires: ${error.message}`);
@@ -45,7 +45,7 @@ export const attractionsAPI = {
   // Détails d'une attraction
   getAttractionDetails: async (attractionId) => {
     try {
-      const response = await api.get(`/attractions/${attractionId}/`);
+      const response = await api.get(`/api/attractions/${attractionId}/`);
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des détails: ${error.message}`);
@@ -55,7 +55,7 @@ export const attractionsAPI = {
   // Suggestions de recherche
   getSearchSuggestions: async (query) => {
     try {
-      const response = await api.get('/attractions/suggestions/', {
+      const response = await api.get('/api/attractions/suggestions/', {
         params: { q: query }
       });
       return response.data;
@@ -67,7 +67,7 @@ export const attractionsAPI = {
   // Catégories disponibles
   getCategories: async () => {
     try {
-      const response = await api.get('/attractions/categories/');
+      const response = await api.get('/api/attractions/categories/');
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des catégories: ${error.message}`);
@@ -77,7 +77,7 @@ export const attractionsAPI = {
   // Pays disponibles
   getCountries: async () => {
     try {
-      const response = await api.get('/attractions/countries/');
+      const response = await api.get('/api/attractions/countries/');
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des pays: ${error.message}`);
@@ -87,7 +87,7 @@ export const attractionsAPI = {
   // Recherche par proximité GPS
   getNearbyAttractions: async (params = {}) => {
     try {
-      const response = await api.get('/attractions/nearby/', { params });
+      const response = await api.get('/api/attractions/nearby/', { params });
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la recherche par proximité: ${error.message}`);
@@ -97,7 +97,7 @@ export const attractionsAPI = {
   // Nouveaux endpoints pour filtres avancés
   getCuisines: async () => {
     try {
-      const response = await api.get('/attractions/cuisines/');
+      const response = await api.get('/api/attractions/cuisines/');
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des cuisines: ${error.message}`);
@@ -106,7 +106,7 @@ export const attractionsAPI = {
 
   getHotelStyles: async () => {
     try {
-      const response = await api.get('/attractions/hotel-styles/');
+      const response = await api.get('/api/attractions/hotel-styles/');
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des styles d'hôtels: ${error.message}`);
@@ -115,7 +115,7 @@ export const attractionsAPI = {
 
   getAttractionTypes: async () => {
     try {
-      const response = await api.get('/attractions/attraction-types/');
+      const response = await api.get('/api/attractions/types/');
       return response.data;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des types d'attractions: ${error.message}`);

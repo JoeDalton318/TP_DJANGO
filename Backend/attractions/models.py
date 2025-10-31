@@ -131,8 +131,8 @@ class UserProfile(models.Model):
         ('luxury', '1000€+'),
     ]
     
-    # Relation avec le user Django (optionnel pour session simple)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
+    # Relation avec le user Django - Un user peut avoir plusieurs profils
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='profiles')
     
     # Informations de base
     name = models.CharField(max_length=100)

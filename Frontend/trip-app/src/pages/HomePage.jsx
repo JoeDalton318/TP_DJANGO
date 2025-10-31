@@ -24,6 +24,8 @@ const HomePage = () => {
         country: selectedCountry?.name,
         limit: 10
       });
+      console.log('📊 Popular attractions response:', response);
+      // L'API retourne {count, data: [...]} donc on prend response.data
       setPopularAttractions(response.data || []);
     } catch (error) {
       console.error('Erreur chargement attractions:', error);

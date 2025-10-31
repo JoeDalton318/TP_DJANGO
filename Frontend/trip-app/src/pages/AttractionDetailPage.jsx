@@ -26,18 +26,9 @@ const AttractionDetailPage = () => {
       setLoading(true);
       setError(null);
       
-      // Simuler un appel API pour les détails complets
-      // En réalité, il faudrait une API spécifique pour les détails
-      const response = await attractionsAPI.searchAttractions({ 
-        tripadvisor_id: id,
-        limit: 1 
-      });
-      
-      if (response.data && response.data.length > 0) {
-        setAttraction(response.data[0]);
-      } else {
-        setError('Attraction non trouvée');
-      }
+      // Utiliser l'API spécifique pour les détails
+      const attractionData = await attractionsAPI.getAttractionDetails(id);
+      setAttraction(attractionData);
     } catch (err) {
       console.error('Erreur chargement détails:', err);
       setError('Erreur lors du chargement des détails');

@@ -2,8 +2,9 @@
  * Service API pour la gestion des compilations (Personne 3)
  * Remplace localStorage par de vraies requêtes API
  */
+import { getAuthHeaders } from '../utils/tokenUtils';
 
-const API_BASE_URL = 'http://localhost:8000/api/attractions';
+const API_BASE_URL = 'http://127.0.0.1:8000/api/attractions';
 
 class CompilationsAPI {
   
@@ -22,7 +23,9 @@ class CompilationsAPI {
       });
       
       const url = `${API_BASE_URL}/compilations/${params.toString() ? '?' + params.toString() : ''}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -40,7 +43,9 @@ class CompilationsAPI {
    */
   async getCompilation(id) {
     try {
-      const response = await fetch(`${API_BASE_URL}/compilations/${id}/`);
+      const response = await fetch(`${API_BASE_URL}/compilations/${id}/`, {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -59,6 +64,7 @@ class CompilationsAPI {
       const response = await fetch(`${API_BASE_URL}/compilations/`, {
         method: 'POST',
         headers: {
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(compilationData)
@@ -84,6 +90,7 @@ class CompilationsAPI {
       const response = await fetch(`${API_BASE_URL}/compilations/${id}/`, {
         method: 'PATCH',
         headers: {
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(compilationData)
@@ -107,7 +114,8 @@ class CompilationsAPI {
   async deleteCompilation(id) {
     try {
       const response = await fetch(`${API_BASE_URL}/compilations/${id}/`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       
       if (!response.ok && response.status !== 204) {
@@ -129,6 +137,7 @@ class CompilationsAPI {
       const response = await fetch(`${API_BASE_URL}/compilations/${compilationId}/add_attraction/`, {
         method: 'POST',
         headers: {
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(attractionData)
@@ -154,6 +163,7 @@ class CompilationsAPI {
       const response = await fetch(`${API_BASE_URL}/compilations/${compilationId}/remove_attraction/`, {
         method: 'DELETE',
         headers: {
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ attraction_id: attractionId })
@@ -207,6 +217,7 @@ class CompilationsAPI {
       const response = await fetch(`${API_BASE_URL}/compilation-items/${itemId}/mark_visited/`, {
         method: 'POST',
         headers: {
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         }
       });

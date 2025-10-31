@@ -1,11 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompilation } from '../contexts/CompilationContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Star, MapPin, Camera, ExternalLink, Award, Heart } from 'lucide-react';
 
 const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => {
   const navigate = useNavigate();
   const { addAttraction, removeAttraction, isInCompilation } = useCompilation();
+  const { user } = useAuth();
 
   const {
     id,
@@ -29,10 +31,23 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
 
   const handleToggleCompilation = (e) => {
     e.stopPropagation();
-    if (isInCompilation(id)) {
-      removeAttraction(id);
-    } else {
-      addAttraction(attraction);
+    
+    // Vérifier si l'utilisateur est connecté
+    if (!user) {
+      alert('Vous devez être connecté pour ajouter des attractions à votre liste');
+      navigate('/login');
+      return;
+    }
+    
+    try {
+      if (isInCompilation(id)) {
+        removeAttraction(id);
+      } else {
+        addAttraction(attraction);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la modification de la liste:', error);
+      alert('Une erreur est survenue. Veuillez réessayer.');
     }
   };
 

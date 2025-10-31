@@ -244,6 +244,15 @@ const SearchPage = () => {
     };
   }, []); // Dépendances vides pour ne charger qu'une seule fois
 
+  // Effect pour déclencher automatiquement la recherche quand les filtres changent
+  useEffect(() => {
+    // Ne pas déclencher si aucune recherche n'a encore été faite
+    if (hasSearched) {
+      console.log('🔄 Filtres changés, nouvelle recherche automatique...');
+      searchAttractions(1);
+    }
+  }, [filters, hasSearched, searchAttractions]);
+
   return (
     <div className="container-fluid bg-light min-vh-100">
       {/* Gestion des erreurs critiques */}

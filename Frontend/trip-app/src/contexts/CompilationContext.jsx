@@ -51,7 +51,8 @@ export const CompilationProvider = ({ children }) => {
       setError(null);
       
       // Vérifier s'il y a une compilation par défaut
-      const compilations = await compilationsAPI.getCompilationsByProfile(profile.id);
+      const response = await compilationsAPI.getCompilationsByProfile(profile.id);
+      const compilations = response.results || response; // Support both formats
       let defaultCompilation = compilations.find(c => c.name === 'Ma compilation');
       
       if (!defaultCompilation) {
@@ -116,6 +117,10 @@ export const CompilationProvider = ({ children }) => {
   };
 
   const addAttraction = async (attraction, options = {}) => {
+    if (!profile) {
+      throw new Error('Vous devez être connecté pour ajouter des attractions');
+    }
+    
     if (!currentCompilation) {
       throw new Error('Aucune compilation active');
     }
@@ -148,6 +153,10 @@ export const CompilationProvider = ({ children }) => {
   };
 
   const removeAttraction = async (attractionId) => {
+    if (!profile) {
+      throw new Error('Vous devez être connecté pour modifier votre liste');
+    }
+    
     if (!currentCompilation) {
       throw new Error('Aucune compilation active');
     }
