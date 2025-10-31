@@ -1,58 +1,52 @@
 from math import radians, sin, cos, sqrt, asin
+from typing import List, Tuple
 
-def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+def _f(x):
+    try:
+        return float(x) if x is not None else None
+    except (TypeError, ValueError):
+        return None
+
+def calculate_distance(lat1, lon1, lat2, lon2) -> float:
     """
-    Calcule la distance entre deux points géographiques en utilisant la formule de Haversine.
-    Retourne la distance en kilomètres.
+    Distance en kilomètres entre deux points (Haversine).
     """
-    # Conversion en radians
-    lat1, lon1 = map(radians, [lat1, lon1])
-    lat2, lon2 = map(radians, [lat2, lon2])
-    
-    # Différences de latitude et longitude
+    lat1, lon1, lat2, lon2 = _f(lat1), _f(lon1), _f(lat2), _f(lon2)
+    if None in (lat1, lon1, lat2, lon2):
+        return float('inf')
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     dlat = lat2 - lat1
     dlon = lon2 - lon1
-    
-    # Formule de Haversine
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     c = 2 * asin(sqrt(a))
-    
-    # Rayon de la Terre en km
-    r = 6371
-    
+    r = 6371.0
     return c * r
 
-def sort_by_shortest_route(attractions):
+def sort_by_shortest_route(attractions: List[object]) -> Tuple[List[object], float]:
     """
-    Implémente l'algorithme du plus proche voisin pour trier les attractions.
-    Retourne (attractions_triées, distance_totale).
+    Heuristique du plus proche voisin. Attends .latitude/.longitude.
+    Retourne (route_ordonnée, distance_totale_km).
     """
     if not attractions:
-        return [], 0
-    
+        return [], 0.0
+
     unvisited = list(attractions)
-    route = [unvisited.pop(0)]  # Commence par la première attraction
-    total_distance = 0
-    
+    route = [unvisited.pop(0)]
+    total_distance = 0.0
+
     while unvisited:
         current = route[-1]
-        min_distance = float('inf')
-        next_attraction = None
-        next_index = 0
-        
-        # Trouve l'attraction non visitée la plus proche
-        for i, attraction in enumerate(unvisited):
-            distance = calculate_distance(
-                current.latitude, current.longitude,
-                attraction.latitude, attraction.longitude
-            )
-            if distance < min_distance:
-                min_distance = distance
-                next_attraction = attraction
-                next_index = i
-        
-        # Ajoute la prochaine attraction à la route
-        route.append(unvisited.pop(next_index))
-        total_distance += min_distance
-    
-    return route, total_distance
+        best_idx = None
+        best_dist = float('inf')
+        for i, a in enumerate(unvisited):
+            d = calculate_distance(getattr(current, 'latitude', None), getattr(current, 'longitude', None),
+                                   getattr(a, 'latitude', None), getattr(a, 'longitude', None))
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        if best_idx is None:
+            break
+        total_distance += 0.0 if best_dist == float('inf') else best_dist
+        route.append(unvisited.pop(best_idx))
+
+    return route, round(total_distance, 3)

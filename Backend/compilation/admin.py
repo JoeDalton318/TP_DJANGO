@@ -13,7 +13,7 @@ class CompilationAdmin(admin.ModelAdmin):
     exclude = ('attractions',)
 
 class AttractionAdmin(admin.ModelAdmin):
-    list_display = ('nom', 'price_level')
+    list_display = ('name', 'price_level')
     list_filter = ('price_level',)
     
 
