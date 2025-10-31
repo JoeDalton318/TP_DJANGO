@@ -301,7 +301,10 @@ class TripAdvisorService:
             
             # Extraire la première photo si disponible
             main_image = ""
+            formatted_photos = []
+            
             if photos and len(photos) > 0:
+                # Première photo comme image principale
                 first_photo = photos[0]
                 images = first_photo.get('images', {})
                 if 'large' in images:
@@ -310,6 +313,23 @@ class TripAdvisorService:
                     main_image = images['medium']['url']
                 elif 'small' in images:
                     main_image = images['small']['url']
+                
+                # Formater toutes les photos pour la galerie
+                for photo in photos:
+                    photo_images = photo.get('images', {})
+                    formatted_photo = {
+                        'id': photo.get('id', ''),
+                        'caption': photo.get('caption', ''),
+                        'published_date': photo.get('published_date', ''),
+                        'user': photo.get('user', {}),
+                        'images': {
+                            'small': photo_images.get('small', {}).get('url', '') if 'small' in photo_images else '',
+                            'medium': photo_images.get('medium', {}).get('url', '') if 'medium' in photo_images else '',
+                            'large': photo_images.get('large', {}).get('url', '') if 'large' in photo_images else '',
+                            'original': photo_images.get('original', {}).get('url', '') if 'original' in photo_images else ''
+                        }
+                    }
+                    formatted_photos.append(formatted_photo)
             
             # Formater selon le modèle Django attendu
             attraction = {
@@ -332,6 +352,7 @@ class TripAdvisorService:
                 'website': data.get('web_url', ''),
                 'timezone': data.get('timezone', ''),
                 'main_image': main_image,
+                'photos': formatted_photos,  # Ajout du tableau complet des photos
                 'num_photos': self._safe_int(data.get('photo_count', len(photos) if photos else 0)),
                 'amenities': self._safe_list(data.get('amenities')),
                 'awards': self._safe_list(data.get('awards')),

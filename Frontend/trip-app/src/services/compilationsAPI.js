@@ -134,6 +134,8 @@ class CompilationsAPI {
    */
   async addAttractionToCompilation(compilationId, attractionData) {
     try {
+      console.log('🔍 Tentative d\'ajout:', { compilationId, attractionData });
+      
       const response = await fetch(`${API_BASE_URL}/compilations/${compilationId}/add_attraction/`, {
         method: 'POST',
         headers: {
@@ -143,12 +145,25 @@ class CompilationsAPI {
         body: JSON.stringify(attractionData)
       });
       
+      console.log('📊 Response status:', response.status);
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('❌ Détails de l\'erreur API:', errorData);
+          errorMessage = errorData.error || errorData.detail || errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error('⚠️ Impossible de parser l\'erreur JSON:', parseError);
+          const textError = await response.text();
+          console.error('📝 Erreur brute:', textError);
+        }
+        throw new Error(errorMessage);
       }
       
-      return await response.json();
+      const result = await response.json();
+      console.log('✅ Attraction ajoutée avec succès:', result);
+      return result;
     } catch (error) {
       console.error('Erreur lors de l\'ajout de l\'attraction:', error);
       throw error;

@@ -4,8 +4,9 @@ import { useCompilation } from '../contexts/CompilationContext';
 import { useUserProfile } from '../contexts/UserProfileContext';
 import { 
   Heart, Trash2, ArrowUpDown, MapPin, Star, Euro, 
-  Navigation, Share2, Download, Calculator, Map
+  Navigation, Share2, Download, Calculator, Map, Info
 } from 'lucide-react';
+import BudgetExplanation from '../components/BudgetExplanation';
 
 const CompilationPage = () => {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ const CompilationPage = () => {
   
   const [sortBy, setSortBy] = useState('addedAt');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [showBudgetExplanation, setShowBudgetExplanation] = useState(false);
 
   const handleSort = (criteria) => {
     if (criteria === 'budget') {
@@ -175,6 +177,13 @@ const CompilationPage = () => {
                     >
                       <Euro size={16} className="me-1" />
                       Optimiser le budget
+                    </button>
+                    <button 
+                      className="btn btn-outline-info btn-sm"
+                      onClick={() => setShowBudgetExplanation(true)}
+                    >
+                      <Info size={16} className="me-1" />
+                      Comment est calculé ce budget ?
                     </button>
                     <button className="btn btn-outline-success">
                       <Navigation size={16} className="me-1" />
@@ -360,6 +369,16 @@ const CompilationPage = () => {
           </div>
         </div>
       </div>
+      
+      {/* Modal d'explication du budget */}
+      {showBudgetExplanation && (
+        <BudgetExplanation 
+          onClose={() => setShowBudgetExplanation(false)}
+          userBudget={profile?.budget_max}
+          estimatedBudget={getTotalBudget()}
+          attractions={compiledAttractions}
+        />
+      )}
     </div>
   );
 };

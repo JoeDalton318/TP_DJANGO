@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
-from .models import UserProfile, Compilation, CompilationItem
+from .models import UserProfile, Compilation, CompilationItem, Attraction
 from .serializers import (
     UserProfileSerializer, UserProfileCreateSerializer,
     CompilationSerializer, CompilationListSerializer, CompilationCreateSerializer,
@@ -1146,33 +1146,78 @@ class CompilationViewSet(viewsets.ModelViewSet):
         
         attraction_id = request.data.get('attraction_id')
         
+        print(f"🔍 ADD_ATTRACTION DEBUG:")
+        print(f"   - compilation_id: {compilation.id}")
+        print(f"   - attraction_id: {attraction_id}")
+        print(f"   - user: {request.user}")
+        print(f"   - request_data: {request.data}")
+        
         if not attraction_id:
             return Response(
                 {'error': 'attraction_id est requis'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Vérifier si l'attraction existe déjà
-        if compilation.items.filter(attraction_id=attraction_id, is_active=True).exists():
+        # Vérifier si l'attraction existe déjà (active ou inactive)
+        existing_item = compilation.items.filter(attraction_id=attraction_id).first()
+        if existing_item:
+            if existing_item.is_active:
+                return Response(
+                    {'error': 'Cette attraction est déjà dans la compilation'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            else:
+                # Réactiver l'item existant
+                existing_item.is_active = True
+                existing_item.save()
+                logger.info(f"✅ Item {existing_item.id} réactivé avec succès")
+                return Response({
+                    'status': 'success',
+                    'message': 'Attraction ajoutée avec succès (réactivée)'
+                })
+        
+        # Récupérer ou créer l'attraction
+        try:
+            attraction, created = Attraction.objects.get_or_create(
+                id=attraction_id,
+                defaults={
+                    'name': request.data.get('name', f'Attraction {attraction_id}'),
+                    'description': request.data.get('description', ''),
+                    'city': request.data.get('city', ''),
+                    'country': request.data.get('country', ''),
+                    'tripadvisor_id': attraction_id
+                }
+            )
+            print(f"   - attraction {'créée' if created else 'trouvée'}: {attraction.id}")
+        except Exception as e:
+            print(f"   - erreur attraction: {e}")
             return Response(
-                {'error': 'Cette attraction est déjà dans la compilation'}, 
+                {'error': f'Erreur avec l\'attraction: {str(e)}'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Créer l'item
-        item_data = {
-            'attraction_id': attraction_id,
-            'priority': request.data.get('priority', 1),
-            'personal_note': request.data.get('personal_note', ''),
-            'estimated_cost': request.data.get('estimated_cost')
-        }
-        
-        serializer = CompilationItemSerializer(data=item_data)
-        if serializer.is_valid():
-            serializer.save(compilation=compilation)
+        # Créer l'item de compilation
+        try:
+            item_data = {
+                'compilation': compilation,
+                'attraction': attraction,
+                'priority': request.data.get('priority', 1),
+                'personal_note': request.data.get('personal_note', ''),
+                'estimated_cost': request.data.get('estimated_cost', 0)
+            }
+            
+            item = CompilationItem.objects.create(**item_data)
+            print(f"   - item créé: {item.id}")
+            
+            serializer = CompilationItemSerializer(item)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            print(f"   - erreur item: {e}")
+            return Response(
+                {'error': f'Erreur lors de la création de l\'item: {str(e)}'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
     def remove_attraction(self, request, pk=None):
@@ -1195,10 +1240,50 @@ class CompilationViewSet(viewsets.ModelViewSet):
             )
         
         try:
-            item = compilation.items.get(attraction_id=attraction_id, is_active=True)
-            item.is_active = False
-            item.save()
-            return Response({'message': 'Attraction retirée avec succès'})
+            # D'abord, chercher un item existant (actif ou inactif)
+            existing_item = None
+            
+            # Recherche par attraction_id direct
+            try:
+                existing_item = compilation.items.get(attraction_id=attraction_id)
+                logger.info(f"🔍 Item existant trouvé par attraction_id: {existing_item.id} (actif: {existing_item.is_active})")
+            except CompilationItem.DoesNotExist:
+                pass
+            
+            # Si pas trouvé, chercher par relation attraction
+            if not existing_item:
+                try:
+                    existing_item = compilation.items.get(attraction__id=attraction_id)
+                    logger.info(f"🔍 Item existant trouvé par attraction.id: {existing_item.id} (actif: {existing_item.is_active})")
+                except CompilationItem.DoesNotExist:
+                    pass
+            
+            # Si pas trouvé, chercher par tripadvisor_id
+            if not existing_item:
+                try:
+                    existing_item = compilation.items.get(attraction__tripadvisor_id=attraction_id)
+                    logger.info(f"🔍 Item existant trouvé par tripadvisor_id: {existing_item.id} (actif: {existing_item.is_active})")
+                except CompilationItem.DoesNotExist:
+                    pass
+            
+            if existing_item:
+                if existing_item.is_active:
+                    # Désactiver l'item existant (soft delete)
+                    existing_item.is_active = False
+                    existing_item.save()
+                    logger.info(f"✅ Item {existing_item.id} désactivé avec succès")
+                    return Response({'message': 'Attraction retirée avec succès'})
+                else:
+                    # L'item existe mais est déjà inactif
+                    logger.warning(f"⚠️ Item {existing_item.id} déjà inactif")
+                    return Response({
+                        'error': 'Cette attraction a déjà été retirée de la compilation'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                logger.warning(f"❌ Aucun item trouvé pour attraction_id: {attraction_id}")
+                return Response({
+                    'error': 'Attraction non trouvée dans cette compilation'
+                }, status=status.HTTP_404_NOT_FOUND)
         except CompilationItem.DoesNotExist:
             return Response(
                 {'error': 'Attraction non trouvée dans cette compilation'}, 

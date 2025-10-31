@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCompilation } from '../contexts/CompilationContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Star, MapPin, Camera, ExternalLink, Award, Heart } from 'lucide-react';
+import PhotoGalleryDebug from './PhotoGalleryDebug';
 
 const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     rating,
     num_reviews,
     main_image,
+    photos,        // Tableau de toutes les photos
     num_photos,
     category,
     subcategory,
@@ -26,10 +28,23 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     bearing,
     awards,
     trip_types,
-    ranking
+    ranking,
+    tags,          // Tags additionnels
+    website,       // Site web
+    phone,         // Téléphone
+    hours          // Horaires
   } = attraction;
 
-  const handleToggleCompilation = (e) => {
+  // Debug pour voir les photos reçues
+  console.log('🎴 AttractionCard photos DEBUG:', {
+    name,
+    num_photos,
+    photosReceived: photos ? photos.length : 0,
+    hasMainImage: !!main_image,
+    photos: photos
+  });
+
+  const handleToggleCompilation = async (e) => {
     e.stopPropagation();
     
     // Vérifier si l'utilisateur est connecté
@@ -39,15 +54,29 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
       return;
     }
     
+    // Désactiver temporairement le bouton pour éviter les clics multiples
+    e.target.disabled = true;
+    
     try {
-      if (isInCompilation(id)) {
-        removeAttraction(id);
+      const isCurrentlyInCompilation = isInCompilation(id);
+      
+      if (isCurrentlyInCompilation) {
+        console.log('🗑️ Suppression de l\'attraction:', id);
+        await removeAttraction(id);
       } else {
-        addAttraction(attraction);
+        console.log('❤️ Ajout de l\'attraction:', id);
+        await addAttraction(attraction);
       }
+      
+      console.log('✅ Action like terminée avec succès');
     } catch (error) {
-      console.error('Erreur lors de la modification de la liste:', error);
+      console.error('❌ Erreur lors de la modification de la liste:', error);
       alert('Une erreur est survenue. Veuillez réessayer.');
+    } finally {
+      // Réactiver le bouton après une petite pause
+      setTimeout(() => {
+        e.target.disabled = false;
+      }, 1000);
     }
   };
 
@@ -158,22 +187,30 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     return null;
   };
 
-  const imageUrl = main_image;
-  const defaultImage = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjlmYSIvPjx0ZXh0IHg9IjIwMCIgeT0iMTAwIiBmb250LXNpemU9IjE4IiBmaWxsPSIjNmM3NTdkIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+UGFzIGQnaW1hZ2UgZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=";
+  // Fonction pour afficher les tags
+  const renderTags = () => {
+    if (!tags || tags.length === 0) return null;
+    
+    return (
+      <div className="mb-2">
+        {tags.slice(0, 3).map((tag, index) => (
+          <span key={index} className="badge bg-secondary me-1 mb-1" style={{ fontSize: '0.7em' }}>
+            {tag}
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="col">
       <div className="card h-100 attraction-card shadow-sm">
-        {/* Image */}
+        {/* Image avec galerie de photos */}
         <div className="position-relative">
-          <img
-            src={imageUrl || defaultImage}
-            className="card-img-top"
-            alt={name}
-            style={{ height: '200px', objectFit: 'cover' }}
-            onError={(e) => {
-              e.target.src = defaultImage;
-            }}
+          <PhotoGalleryDebug 
+            photos={photos}
+            mainImage={main_image}
+            attractionName={name}
           />
           
           {/* Badge catégorie */}
@@ -207,20 +244,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
             </span>
           )}
 
-          {/* Bouton coeur pour compilation */}
-          <button
-            className={`btn btn-sm position-absolute top-0 end-0 m-2 ${
-              isInCompilation(id) ? 'btn-danger' : 'btn-outline-light'
-            }`}
-            onClick={handleToggleCompilation}
-            title={isInCompilation(id) ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
-            style={{ opacity: 0.9 }}
-          >
-            <Heart 
-              size={16} 
-              fill={isInCompilation(id) ? 'currentColor' : 'none'} 
-            />
-          </button>
+          {/* Bouton coeur pour compilation - SUPPRIMÉ - utiliser celui du bas */}
         </div>
 
         <div className="card-body d-flex flex-column">
@@ -246,6 +270,9 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
               {renderPriceLevel(price_level)}
             </div>
           )}
+
+          {/* Tags */}
+          {renderTags()}
           
           {/* Description */}
           {description && (
@@ -261,10 +288,16 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
           <div className="mt-auto pt-2">
             <div className="d-flex justify-content-between align-items-center mb-2">
               <div className="d-flex flex-wrap">
-                {num_photos && num_photos > 1 && (
-                  <small className="text-muted d-flex align-items-center me-2">
-                    <Camera size={14} className="me-1" />
-                    {num_photos.toLocaleString()} photos
+                {/* Informations contact/web si disponibles */}
+                {website && (
+                  <small className="text-muted d-flex align-items-center me-2 mb-1">
+                    <ExternalLink size={12} className="me-1" />
+                    Site web
+                  </small>
+                )}
+                {phone && (
+                  <small className="text-muted d-flex align-items-center me-2 mb-1">
+                    📞 Téléphone
                   </small>
                 )}
                 {renderPopularTripType()}

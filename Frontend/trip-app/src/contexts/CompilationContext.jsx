@@ -44,7 +44,7 @@ export const CompilationProvider = ({ children }) => {
   };
 
   const loadOrCreateDefaultCompilation = async () => {
-    if (!profile) return;
+    if (!profile) return null;
 
     try {
       setLoading(true);
@@ -62,15 +62,19 @@ export const CompilationProvider = ({ children }) => {
           description: 'Ma liste d\'attractions favorites',
           user_profile_id: profile.id
         });
+        console.log('✅ Compilation par défaut créée:', defaultCompilation);
       } else {
         // Charger les détails complets
         defaultCompilation = await compilationsAPI.getCompilation(defaultCompilation.id);
+        console.log('✅ Compilation par défaut trouvée:', defaultCompilation);
       }
       
       setCurrentCompilation(defaultCompilation);
+      return defaultCompilation;
     } catch (err) {
       console.error('Erreur lors de la création/chargement de la compilation:', err);
       setError('Impossible de créer la compilation');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -117,12 +121,34 @@ export const CompilationProvider = ({ children }) => {
   };
 
   const addAttraction = async (attraction, options = {}) => {
+    console.log('🔍 AddAttraction appelé:', { attraction: attraction.id, profile: profile?.id });
+    
     if (!profile) {
       throw new Error('Vous devez être connecté pour ajouter des attractions');
     }
     
-    if (!currentCompilation) {
-      throw new Error('Aucune compilation active');
+    // Éviter les actions multiples simultanées
+    if (loading) {
+      console.log('⏳ Action déjà en cours, ignoring...');
+      return;
+    }
+    
+    const targetCompilation = currentCompilation || await loadOrCreateDefaultCompilation();
+    if (!targetCompilation) {
+      throw new Error('Impossible d\'obtenir une compilation active');
+    }
+    
+    // Vérifier si l'attraction n'est pas déjà dans la compilation
+    const isAlreadyIn = targetCompilation.items?.some(item => 
+      item.attraction && (
+        item.attraction.id === attraction.id || 
+        item.attraction.tripadvisor_id === attraction.id
+      ) && item.is_active
+    );
+    
+    if (isAlreadyIn) {
+      console.log('⚠️ Attraction déjà dans la compilation');
+      return true;
     }
 
     try {
@@ -131,20 +157,27 @@ export const CompilationProvider = ({ children }) => {
       
       const itemData = {
         attraction_id: attraction.id,
+        name: attraction.name,
+        description: attraction.description,
+        city: attraction.city,
+        country: attraction.country,
         priority: options.priority || 1,
         personal_note: options.note || '',
-        estimated_cost: options.estimatedCost
+        estimated_cost: options.estimatedCost || 0
       };
       
-      await compilationsAPI.addAttractionToCompilation(currentCompilation.id, itemData);
+      console.log('📤 Données à envoyer:', { compilationId: targetCompilation.id, itemData });
+      
+      await compilationsAPI.addAttractionToCompilation(targetCompilation.id, itemData);
       
       // Recharger la compilation pour obtenir les données mises à jour
-      const updatedCompilation = await compilationsAPI.getCompilation(currentCompilation.id);
+      const updatedCompilation = await compilationsAPI.getCompilation(targetCompilation.id);
       setCurrentCompilation(updatedCompilation);
       
+      console.log('✅ Attraction ajoutée avec succès');
       return true;
     } catch (err) {
-      console.error('Erreur lors de l\'ajout de l\'attraction:', err);
+      console.error('❌ Erreur lors de l\'ajout de l\'attraction:', err);
       setError(err.message || 'Impossible d\'ajouter l\'attraction');
       throw err;
     } finally {
@@ -153,11 +186,20 @@ export const CompilationProvider = ({ children }) => {
   };
 
   const removeAttraction = async (attractionId) => {
+    console.log('🗑️ RemoveAttraction appelé:', { attractionId, profile: profile?.id });
+    
     if (!profile) {
       throw new Error('Vous devez être connecté pour modifier votre liste');
     }
     
-    if (!currentCompilation) {
+    // Éviter les actions multiples simultanées
+    if (loading) {
+      console.log('⏳ Action déjà en cours, ignoring...');
+      return;
+    }
+    
+    const targetCompilation = currentCompilation || await loadOrCreateDefaultCompilation();
+    if (!targetCompilation) {
       throw new Error('Aucune compilation active');
     }
 
@@ -165,15 +207,16 @@ export const CompilationProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      await compilationsAPI.removeAttractionFromCompilation(currentCompilation.id, attractionId);
+      await compilationsAPI.removeAttractionFromCompilation(targetCompilation.id, attractionId);
       
       // Recharger la compilation
-      const updatedCompilation = await compilationsAPI.getCompilation(currentCompilation.id);
+      const updatedCompilation = await compilationsAPI.getCompilation(targetCompilation.id);
       setCurrentCompilation(updatedCompilation);
       
+      console.log('✅ Attraction supprimée avec succès');
       return true;
     } catch (err) {
-      console.error('Erreur lors de la suppression de l\'attraction:', err);
+      console.error('❌ Erreur lors de la suppression de l\'attraction:', err);
       setError(err.message || 'Impossible de supprimer l\'attraction');
       throw err;
     } finally {
@@ -268,10 +311,19 @@ export const CompilationProvider = ({ children }) => {
 
   // Helpers pour compatibilité avec l'ancien système
   const isInCompilation = (attractionId) => {
-    if (!currentCompilation || !currentCompilation.items) return false;
-    return currentCompilation.items.some(item => 
-      item.attraction && item.attraction.id === attractionId && item.is_active
-    );
+    if (!currentCompilation || !currentCompilation.items) {
+      return false;
+    }
+    
+    const found = currentCompilation.items.some(item => {
+      return item.attraction && (
+        item.attraction.id === attractionId || 
+        item.attraction.tripadvisor_id === attractionId ||
+        item.attraction_id === attractionId
+      ) && item.is_active;
+    });
+    
+    return found;
   };
 
   const getCompilationCount = () => {
