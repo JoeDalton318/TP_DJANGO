@@ -159,14 +159,19 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
                 </select>
               </div>
               <div className="col-md-6">
-                <label className="form-label">Pays (optionnel)</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="ex: France, Italie..."
+                <label className="form-label">Pays</label>
+                <select
+                  className="form-select"
                   value={selectedCountry}
                   onChange={(e) => setSelectedCountry(e.target.value)}
-                />
+                >
+                  <option value="">Tous les pays</option>
+                  {countries.map(country => (
+                    <option key={country.code} value={country.name_fr}>
+                      {country.name_fr}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

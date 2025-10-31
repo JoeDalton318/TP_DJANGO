@@ -32,7 +32,7 @@ function App() {
     currentPage: 1,
     totalPages: 1,
     totalCount: 0,
-    limit: 20,
+    limit: 5, // Réduire pour avoir plus de pages
     hasNext: false,
     hasPrevious: false
   });
@@ -78,7 +78,7 @@ function App() {
       // Charger les attractions populaires par défaut (France ou pays détecté)
       const attractionsData = await attractionsAPI.getPopularAttractions({ 
         country: defaultCountry, 
-        limit: 20,
+        limit: 5, // Réduire pour forcer la pagination
         page: 1
       });
       
@@ -87,7 +87,7 @@ function App() {
         currentPage: attractionsData.page || 1,
         totalPages: attractionsData.total_pages || 1,
         totalCount: attractionsData.total_count || 0,
-        limit: attractionsData.limit || 20,
+        limit: attractionsData.limit || 5, // Cohérent avec la limite
         hasNext: attractionsData.has_next || false,
         hasPrevious: attractionsData.has_previous || false
       });
@@ -97,13 +97,13 @@ function App() {
       console.error('Erreur chargement attractions par région:', err);
       // Fallback: charger sans filtre pays
       try {
-        const fallbackData = await attractionsAPI.getPopularAttractions({ limit: 20, page: 1 });
+        const fallbackData = await attractionsAPI.getPopularAttractions({ limit: 5, page: 1 }); // Réduire pour forcer la pagination
         setAttractions(fallbackData.data || []);
         setPagination({
           currentPage: fallbackData.page || 1,
           totalPages: fallbackData.total_pages || 1,
           totalCount: fallbackData.total_count || 0,
-          limit: fallbackData.limit || 20,
+          limit: fallbackData.limit || 5, // Cohérent avec la limite
           hasNext: fallbackData.has_next || false,
           hasPrevious: fallbackData.has_previous || false
         });
@@ -115,7 +115,7 @@ function App() {
           currentPage: 1,
           totalPages: 1,
           totalCount: 0,
-          limit: 20,
+          limit: 5, // Cohérent avec la limite
           hasNext: false,
           hasPrevious: false
         });
@@ -139,7 +139,7 @@ function App() {
         country: searchParams.country,
         category: searchParams.category,
         page: page,
-        limit: 20
+        limit: 5 // Réduire pour forcer la pagination
       };
 
       // Ajouter les filtres avancés s'ils sont présents
@@ -192,7 +192,7 @@ function App() {
         longitude: locationParams.longitude,
         radius: locationParams.radius || 5,
         page: page,
-        limit: 20
+        limit: 5 // Réduire pour forcer la pagination
       };
 
       // Ajouter les filtres avancés s'ils sont présents
@@ -240,7 +240,7 @@ function App() {
           setLoading(true);
           const attractionsData = await attractionsAPI.getPopularAttractions({ 
             country: lastSearch.country, 
-            limit: 20,
+            limit: 5, // Réduire pour forcer la pagination
             page: newPage
           });
           
@@ -249,7 +249,7 @@ function App() {
             currentPage: attractionsData.page || newPage,
             totalPages: attractionsData.total_pages || 1,
             totalCount: attractionsData.total_count || 0,
-            limit: attractionsData.limit || 20,
+            limit: attractionsData.limit || 5, // Cohérent avec la limite
             hasNext: attractionsData.has_next || false,
             hasPrevious: attractionsData.has_previous || false
           });
@@ -280,10 +280,16 @@ function App() {
     handleViewDetails(attraction);
   };
 
-  // Titre dynamique basé sur le type de recherche
+  // Titre dynamique basé sur le type de recherche et le contenu
   const getPageTitle = () => {
+    // Si aucune recherche n'a été effectuée et qu'on a des attractions
+    if (!lastSearch && attractions.length > 0) {
+      return '� Découvrez les Meilleures Attractions';
+    }
+    
+    // Si aucune recherche et aucune attraction
     if (!lastSearch) {
-      return '🌟 Attractions Populaires';
+      return '🌟 Trip Explorer - Découvrez le Monde';
     }
 
     switch (lastSearch.type) {
@@ -299,11 +305,24 @@ function App() {
         }
         return '🔍 Résultats de recherche';
       case 'popular':
+        // Analyser le contenu pour un titre plus précis
+        if (attractions.length > 0) {
+          const countries = [...new Set(attractions.map(a => a.country))];
+          const categories = [...new Set(attractions.map(a => a.subcategory))];
+          
+          if (countries.length === 1 && countries[0] !== 'global') {
+            return `🌟 Attractions Populaires - ${countries[0]}`;
+          } else if (categories.includes('Parcs aquatiques et d\'attractions')) {
+            return '🎢 Parcs d\'Attractions les Plus Populaires';
+          } else {
+            return '🌟 Attractions Populaires Mondiales';
+          }
+        }
         return lastSearch.country !== 'global' 
           ? `🌟 Attractions Populaires - ${lastSearch.country}`
           : '🌟 Attractions Populaires Mondiales';
       default:
-        return '🌟 Découvrez des Attractions';
+        return '🌟 Découvrez des Attractions Exceptionnelles';
     }
   };
 
@@ -358,10 +377,28 @@ function App() {
 
         {/* Titre et compteur */}
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2 className="h4 mb-0">{getPageTitle()}</h2>
+          <div>
+            <h2 className="h4 mb-1">{getPageTitle()}</h2>
+            {/* Sous-titre informatif */}
+            {attractions.length > 0 && (
+              <small className="text-muted">
+                {lastSearch?.type === 'popular' && !lastSearch.query ? 
+                  'Les attractions les mieux notées selon TripAdvisor' :
+                  lastSearch?.type === 'location' ? 
+                  'Attractions trouvées dans votre zone' :
+                  lastSearch?.query ? 
+                  `Résultats correspondant à votre recherche` :
+                  'Sélection d\'attractions de qualité'
+                }
+              </small>
+            )}
+          </div>
           {attractions.length > 0 && (
             <span className="badge bg-secondary">
-              {attractions.length} attraction{attractions.length > 1 ? 's' : ''}
+              {pagination.totalCount > attractions.length ? 
+                `${attractions.length} sur ${pagination.totalCount}` :
+                `${attractions.length} attraction${attractions.length > 1 ? 's' : ''}`
+              }
             </span>
           )}
         </div>
