@@ -1,32 +1,37 @@
-// src/components/LoginPage.jsx
-import React, { useState, useContext } from 'react';
-import { login } from '../api/auth';
-import { AuthContext } from '../contexts/AuthContext';
+// src/pages/LoginPage.jsx
+import { useState } from 'react';
+import LoginForm from '../components/LoginForm';
+import { loginUser } from '../api/auth';
 
-const LoginPage = () => {
-  const { handleLogin } = useContext(AuthContext);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
+export default function LoginPage() {
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
 
-  const handleSubmit = async () => {
+  const handleLogin = async ({ username, password }) => {
     try {
-      const data = await login(username, password);
-      await handleLogin(username, password);
+      // ✅ Passe les données comme un objet, pas des arguments séparés
+      const data = await loginUser({ username, password });
+
+      console.log('✅ Connexion réussie', data);
+      setMessage('Connexion réussie !');
+      setError(null);
+
+      // Stockage local des tokens JWT
+      if (data.access) localStorage.setItem('access', data.access);
+      if (data.refresh) localStorage.setItem('refresh', data.refresh);
     } catch (err) {
-      setMessage(err.response?.data?.error || 'Erreur connexion');
+      console.error('❌ Erreur connexion :', err);
+      setError(err.message || 'Erreur de connexion');
+      setMessage(null);
     }
   };
 
   return (
     <div>
       <h1>Connexion</h1>
-      <input placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} />
-      <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-      <button onClick={handleSubmit}>Se connecter</button>
-      {message && <p>{message}</p>}
+      <LoginForm onLogin={handleLogin} />
+      {message && <p style={{ color: 'green' }}>{message}</p>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
     </div>
   );
-};
-
-export default LoginPage;
+}

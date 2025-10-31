@@ -1,30 +1,20 @@
-// src/routes/AppRoutes.jsx
-import React, { useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthContext } from '../contexts/AuthContext';
-import LandingPage from '../components/LandingPage';
-import AttractionPage from '../components/AttractionPage';
-import RegisterPage from '../components/RegisterPage';
+import { Routes, Route } from 'react-router-dom';
 import LoginPage from '../components/LoginPage';
+import RegisterPage from '../components/RegisterPage';
+import ProfilePage from '../components/ProfilePage';
+import ReactBasic from '../components/ReactBasic';
+import Navbar from '../components/Navbar';
 
-const AppRoutes = () => {
-  const { token } = useContext(AuthContext);
-
+export default function AppRoutes() {
   return (
-    <Router>
+    <>
+      <Navbar />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/" element={<ReactBasic />} />
         <Route path="/login" element={<LoginPage />} />
-        {token && (
-          <>
-            <Route path="/attractions/:id" element={<AttractionPage />} />
-          </>
-        )}
-        {!token && <Route path="*" element={<Navigate to="/login" />} />}
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Routes>
-    </Router>
+    </>
   );
-};
-
-export default AppRoutes;
+}

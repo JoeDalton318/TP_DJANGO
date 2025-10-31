@@ -1,32 +1,31 @@
-// src/components/RegisterPage.jsx
-import React, { useState } from 'react';
-import { register } from '../api/auth';
+// src/pages/RegisterPage.jsx
+import { useState } from 'react';
+import RegisterForm from './RegisterForm';
+import { registerUser } from '../api/auth';
 
-const RegisterPage = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
+export default function RegisterPage() {
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
 
-  const handleRegister = async () => {
+  const handleRegister = async (formData) => {
     try {
-      const data = await register(username, password, email);
-      setMessage(data.message);
+      const result = await registerUser(formData);
+      console.log('✅ Inscription réussie', result);
+      setMessage('Inscription réussie ! Vous pouvez maintenant vous connecter.');
+      setError(null);
     } catch (err) {
-      setMessage(err.response?.data?.error || 'Erreur inscription');
+      console.error('❌ Erreur inscription :', err);
+      setError(err.message);
+      setMessage(null);
     }
   };
 
   return (
     <div>
-      <h1>Inscription</h1>
-      <input placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} />
-      <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-      <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
-      <button onClick={handleRegister}>S’enregistrer</button>
-      {message && <p>{message}</p>}
+      <h1>Créer un compte</h1>
+      <RegisterForm onRegister={handleRegister} />
+      {message && <p style={{ color: 'green' }}>{message}</p>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
     </div>
   );
-};
-
-export default RegisterPage;
+}
