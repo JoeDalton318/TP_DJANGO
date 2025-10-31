@@ -1,7 +1,12 @@
 import React from 'react';
-import { Star, MapPin, Users, Camera, ExternalLink, Award, Heart, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useCompilation } from '../contexts/CompilationContext';
+import { Star, MapPin, Camera, ExternalLink, Award, Heart } from 'lucide-react';
 
 const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => {
+  const navigate = useNavigate();
+  const { addAttraction, removeAttraction, isInCompilation } = useCompilation();
+
   const {
     id,
     name,
@@ -21,6 +26,19 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     trip_types,
     ranking
   } = attraction;
+
+  const handleToggleCompilation = (e) => {
+    e.stopPropagation();
+    if (isInCompilation(id)) {
+      removeAttraction(id);
+    } else {
+      addAttraction(attraction);
+    }
+  };
+
+  const handleViewDetails = () => {
+    navigate(`/attraction/${id}`);
+  };
 
   // Fonction pour afficher les étoiles
   const renderStars = (rating) => {
@@ -53,7 +71,6 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
   const renderPriceLevel = (price_level) => {
     if (!price_level) return null;
     
-    // Gérer les prix avec des €
     if (typeof price_level === 'string' && price_level.includes('€')) {
       const count = price_level.length;
       const levels = {
@@ -70,7 +87,6 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
       );
     }
     
-    // Gérer les prix numériques
     const levels = {
       1: { text: 'Économique', color: 'success' },
       2: { text: 'Modéré', color: 'warning' },
@@ -92,7 +108,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
   const renderAward = () => {
     if (!awards || awards.length === 0) return null;
     
-    const latestAward = awards[0]; // Premier award (plus récent)
+    const latestAward = awards[0];
     if (latestAward.award_type && latestAward.award_type.includes('Travelers Choice')) {
       return (
         <div className="position-absolute top-0 end-0 m-2">
@@ -110,7 +126,6 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
   const renderPopularTripType = () => {
     if (!trip_types || trip_types.length === 0) return null;
     
-    // Trouver le type avec le plus de votes
     const mostPopular = trip_types.reduce((max, current) => {
       const currentValue = parseInt(current.value) || 0;
       const maxValue = parseInt(max.value) || 0;
@@ -128,7 +143,6 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     return null;
   };
 
-  // Image par défaut si pas d'image disponible
   const imageUrl = main_image;
   const defaultImage = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjlmYSIvPjx0ZXh0IHg9IjIwMCIgeT0iMTAwIiBmb250LXNpemU9IjE4IiBmaWxsPSIjNmM3NTdkIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+UGFzIGQnaW1hZ2UgZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=";
 
@@ -147,7 +161,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
             }}
           />
           
-          {/* Badge catégorie et sous-catégorie */}
+          {/* Badge catégorie */}
           <div className="position-absolute top-0 start-0 m-2">
             {category && (
               <span className="badge bg-primary mb-1 d-block">
@@ -164,7 +178,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
           {/* Award badge */}
           {renderAward()}
           
-          {/* Badge distance (si recherche géolocalisée) */}
+          {/* Badge distance */}
           {showDistance && distance && (
             <span className="badge bg-success position-absolute bottom-0 end-0 m-2">
               {parseFloat(distance).toFixed(1)} km {bearing && `(${bearing})`}
@@ -177,6 +191,21 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
               #{ranking}
             </span>
           )}
+
+          {/* Bouton coeur pour compilation */}
+          <button
+            className={`btn btn-sm position-absolute top-0 end-0 m-2 ${
+              isInCompilation(id) ? 'btn-danger' : 'btn-outline-light'
+            }`}
+            onClick={handleToggleCompilation}
+            title={isInCompilation(id) ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
+            style={{ opacity: 0.9 }}
+          >
+            <Heart 
+              size={16} 
+              fill={isInCompilation(id) ? 'currentColor' : 'none'} 
+            />
+          </button>
         </div>
 
         <div className="card-body d-flex flex-column">
@@ -227,13 +256,24 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
               </div>
             </div>
             
-            <button
-              className="btn btn-primary btn-sm w-100"
-              onClick={() => onViewDetails(attraction)}
-            >
-              <ExternalLink size={16} className="me-1" />
-              Voir détails
-            </button>
+            <div className="d-grid gap-2">
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleViewDetails}
+              >
+                <ExternalLink size={16} className="me-1" />
+                Voir détails
+              </button>
+              <button
+                className={`btn btn-sm ${
+                  isInCompilation(id) ? 'btn-outline-danger' : 'btn-outline-success'
+                }`}
+                onClick={handleToggleCompilation}
+              >
+                <Heart size={14} className="me-1" fill={isInCompilation(id) ? 'currentColor' : 'none'} />
+                {isInCompilation(id) ? 'Retirer' : 'Ajouter à ma liste'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

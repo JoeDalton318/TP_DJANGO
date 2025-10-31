@@ -2,10 +2,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from attractions.tripadvisor_service import tripadvisor_service
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse, HttpResponse
+from django.utils import timezone
 import logging
 import requests
 
@@ -20,6 +22,7 @@ class PopularAttractionsView(APIView):
     API pour récupérer les attractions populaires via TripAdvisor API officielle
     Utilise: GET /location/search et GET /location/{id}/details
     """
+    permission_classes = [AllowAny]  # Accessible sans authentification
     
     def get(self, request):
         try:
@@ -987,3 +990,275 @@ class AttractionPhotosView(APIView):
                 'location_id': location_id,
                 'photos': []
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===== VIEWSETS POUR PERSONNE 1 & 3 =====
+
+from rest_framework import viewsets, filters, permissions
+from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q, Count, Avg
+from .models import UserProfile, Compilation, CompilationItem
+from .serializers import (
+    UserProfileSerializer, UserProfileCreateSerializer,
+    CompilationSerializer, CompilationListSerializer, CompilationCreateSerializer,
+    CompilationItemSerializer, CompilationStatsSerializer, UserProfileStatsSerializer
+)
+
+
+class UserProfileViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pour gérer les profils utilisateur (Personne 1)
+    
+    Endpoints:
+    - GET /api/profiles/ : Liste des profils de l'utilisateur connecté
+    - POST /api/profiles/ : Créer un profil pour l'utilisateur connecté
+    - GET /api/profiles/{id}/ : Détail d'un profil
+    - PUT/PATCH /api/profiles/{id}/ : Modifier un profil
+    - DELETE /api/profiles/{id}/ : Supprimer un profil
+    - GET /api/profiles/stats/ : Statistiques des profils
+    """
+    
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['profile_type', 'budget_range', 'age']
+    search_fields = ['name']
+    ordering_fields = ['name', 'age', 'created_at']
+    ordering = ['-created_at']
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filtrer les profils par utilisateur connecté"""
+        if not self.request.user.is_authenticated:
+            return UserProfile.objects.none()
+            
+        return UserProfile.objects.filter(
+            is_active=True,
+            user=self.request.user
+        )
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return UserProfileCreateSerializer
+        return UserProfileSerializer
+    
+    def perform_create(self, serializer):
+        """Associer automatiquement le profil à l'utilisateur connecté"""
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Statistiques des profils utilisateur"""
+        queryset = self.get_queryset()
+        
+        stats = {
+            'total_profiles': queryset.count(),
+            'profile_types_distribution': dict(
+                queryset.values('profile_type').annotate(count=Count('id')).values_list('profile_type', 'count')
+            ),
+            'budget_ranges_distribution': dict(
+                queryset.values('budget_range').annotate(count=Count('id')).values_list('budget_range', 'count')
+            ),
+            'average_age': queryset.aggregate(avg_age=Avg('age'))['avg_age'] or 0
+        }
+        
+        serializer = UserProfileStatsSerializer(data=stats)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def compilations(self, request, pk=None):
+        """Récupérer les compilations d'un profil"""
+        profile = self.get_object()
+        compilations = profile.compilations.filter(is_active=True)
+        serializer = CompilationListSerializer(compilations, many=True)
+        return Response(serializer.data)
+
+
+class CompilationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pour gérer les compilations d'attractions (Personne 3)
+    
+    Endpoints:
+    - GET /api/compilations/ : Liste des compilations
+    - POST /api/compilations/ : Créer une compilation
+    - GET /api/compilations/{id}/ : Détail d'une compilation
+    - PUT/PATCH /api/compilations/{id}/ : Modifier une compilation
+    - DELETE /api/compilations/{id}/ : Supprimer une compilation
+    - POST /api/compilations/{id}/add_attraction/ : Ajouter une attraction
+    - DELETE /api/compilations/{id}/remove_attraction/ : Retirer une attraction
+    - GET /api/compilations/stats/ : Statistiques des compilations
+    """
+    
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['user_profile__profile_type']
+    search_fields = ['name', 'description', 'user_profile__name']
+    ordering_fields = ['name', 'created_at', 'updated_at', 'estimated_budget']
+    ordering = ['-updated_at']
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filtrer les compilations par utilisateur connecté"""
+        if not self.request.user.is_authenticated:
+            return Compilation.objects.none()
+            
+        return Compilation.objects.filter(
+            is_active=True,
+            user_profile__user=self.request.user
+        ).select_related('user_profile').prefetch_related('items__attraction')
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CompilationListSerializer
+        elif self.action == 'create':
+            return CompilationCreateSerializer
+        return CompilationSerializer
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtrer par profil utilisateur si spécifié
+        user_profile_id = self.request.query_params.get('user_profile')
+        if user_profile_id:
+            queryset = queryset.filter(user_profile_id=user_profile_id)
+        
+        # Filtrer par statut budget
+        budget_status = self.request.query_params.get('budget_status')
+        if budget_status in ['under_budget', 'on_budget', 'over_budget']:
+            # Nécessite calcul côté Python (pas optimisé pour gros volumes)
+            filtered_ids = []
+            for compilation in queryset:
+                if compilation.budget_status == budget_status:
+                    filtered_ids.append(compilation.id)
+            queryset = queryset.filter(id__in=filtered_ids)
+        
+        return queryset
+    
+    @action(detail=True, methods=['post'])
+    def add_attraction(self, request, pk=None):
+        """Ajouter une attraction à la compilation"""
+        compilation = self.get_object()
+        attraction_id = request.data.get('attraction_id')
+        
+        if not attraction_id:
+            return Response(
+                {'error': 'attraction_id est requis'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Vérifier si l'attraction existe déjà
+        if compilation.items.filter(attraction_id=attraction_id, is_active=True).exists():
+            return Response(
+                {'error': 'Cette attraction est déjà dans la compilation'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Créer l'item
+        item_data = {
+            'attraction_id': attraction_id,
+            'priority': request.data.get('priority', 1),
+            'personal_note': request.data.get('personal_note', ''),
+            'estimated_cost': request.data.get('estimated_cost')
+        }
+        
+        serializer = CompilationItemSerializer(data=item_data)
+        if serializer.is_valid():
+            serializer.save(compilation=compilation)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['delete'])
+    def remove_attraction(self, request, pk=None):
+        """Retirer une attraction de la compilation"""
+        compilation = self.get_object()
+        attraction_id = request.data.get('attraction_id')
+        
+        if not attraction_id:
+            return Response(
+                {'error': 'attraction_id est requis'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            item = compilation.items.get(attraction_id=attraction_id, is_active=True)
+            item.is_active = False
+            item.save()
+            return Response({'message': 'Attraction retirée avec succès'})
+        except CompilationItem.DoesNotExist:
+            return Response(
+                {'error': 'Attraction non trouvée dans cette compilation'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Statistiques des compilations"""
+        queryset = self.get_queryset()
+        
+        # Calculs de base
+        total_compilations = queryset.count()
+        total_items = sum(compilation.total_items for compilation in queryset)
+        
+        # Budget moyen (nécessite itération Python)
+        budgets = [compilation.estimated_budget for compilation in queryset if compilation.total_items > 0]
+        average_budget = sum(budgets) / len(budgets) if budgets else 0
+        
+        # Catégorie la plus populaire
+        category_counts = {}
+        for compilation in queryset:
+            for category, count in compilation.categories_breakdown.items():
+                category_counts[category] = category_counts.get(category, 0) + count
+        
+        most_popular_category = max(category_counts.items(), key=lambda x: x[1])[0] if category_counts else 'N/A'
+        
+        stats = {
+            'total_compilations': total_compilations,
+            'total_items': total_items,
+            'average_budget': round(average_budget, 2),
+            'most_popular_category': most_popular_category,
+            'categories_distribution': category_counts
+        }
+        
+        serializer = CompilationStatsSerializer(data=stats)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+
+
+class CompilationItemViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pour gérer les items de compilation individuellement
+    
+    Endpoints:
+    - GET /api/compilation-items/ : Liste des items
+    - GET /api/compilation-items/{id}/ : Détail d'un item
+    - PUT/PATCH /api/compilation-items/{id}/ : Modifier un item
+    - DELETE /api/compilation-items/{id}/ : Supprimer un item
+    """
+    
+    queryset = CompilationItem.objects.filter(is_active=True).select_related('compilation', 'attraction')
+    serializer_class = CompilationItemSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['compilation', 'priority', 'is_visited']
+    ordering_fields = ['priority', 'added_at', 'effective_cost']
+    ordering = ['priority', '-added_at']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtrer par compilation
+        compilation_id = self.request.query_params.get('compilation')
+        if compilation_id:
+            queryset = queryset.filter(compilation_id=compilation_id)
+        
+        return queryset
+    
+    @action(detail=True, methods=['post'])
+    def mark_visited(self, request, pk=None):
+        """Marquer un item comme visité"""
+        item = self.get_object()
+        item.is_visited = True
+        item.visited_at = timezone.now()
+        item.save()
+        
+        serializer = self.get_serializer(item)
+        return Response(serializer.data)

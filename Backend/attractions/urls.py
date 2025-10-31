@@ -1,9 +1,19 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 
 app_name = 'attractions'
 
+# Router pour les ViewSets
+router = DefaultRouter()
+router.register(r'profiles', views.UserProfileViewSet, basename='userprofile')
+router.register(r'compilations', views.CompilationViewSet, basename='compilation')
+router.register(r'compilation-items', views.CompilationItemViewSet, basename='compilationitem')
+
 urlpatterns = [
+    # Include router URLs (APIs REST pour Personne 1 & 3) - DOIT ÊTRE EN PREMIER
+    path('', include(router.urls)),
+    
     # API de recherche
     path('search/', views.AttractionSearchView.as_view(), name='search'),
     
