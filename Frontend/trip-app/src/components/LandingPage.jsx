@@ -1,4 +1,3 @@
-// src/components/LandingPage.jsx
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import { ProfileContext } from '../contexts/ProfileContext';
@@ -30,7 +29,7 @@ const LandingPage = () => {
 
       {profile ? (
         <div>
-          <h2>Profil sélectionné : {profile.profile_type} — {profile.selected_country}</h2>
+          <h2>Profil sélectionné: {profile.profile_type} — {profile.selected_country}</h2>
         </div>
       ) : (
         <div>

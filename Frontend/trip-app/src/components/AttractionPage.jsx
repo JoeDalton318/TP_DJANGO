@@ -32,7 +32,7 @@ const AttractionPage = () => {
     <div>
       <h1>{attraction.name}</h1>
       <p>{attraction.description}</p>
-      <p>Note TripAdvisor : {tripDetails.rating}</p>
+      <p>Note TripAdvisor: {tripDetails.rating}</p>
       <h2>Avis</h2>
       <ul>
         {reviews.map(r => (
