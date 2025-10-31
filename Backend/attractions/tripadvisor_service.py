@@ -76,6 +76,39 @@ class TripAdvisorService:
         logger.warning(f"No results found for query: {search_query}")
         return []
     
+    def nearby_search(self, lat_long: str, language: str = "fr", radius: str = None, category: str = None) -> List[Dict[str, Any]]:
+        """
+        Recherche de lieux à proximité avec coordonnées GPS
+        Format: GET /location/nearby_search?latLong=42.3455%2C-71.10767&language=en&key=API_KEY
+        """
+        cache_key = f"tripadvisor_nearby_{lat_long}_{language}_{radius}_{category}"
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            logger.info(f"Returning cached nearby search result for: {lat_long}")
+            return cached_result
+        
+        params = {
+            'latLong': lat_long,
+            'language': language
+        }
+        
+        if radius:
+            params['radius'] = radius
+        if category:
+            params['category'] = category
+        
+        data = self._make_request('location/nearby_search', params)
+        
+        if data and 'data' in data:
+            result = data['data']
+            # Cache pour 30 minutes (données de proximité peuvent changer plus souvent)
+            cache.set(cache_key, result, 1800)
+            logger.info(f"Found {len(result)} nearby locations for: {lat_long}")
+            return result
+        
+        logger.warning(f"No nearby results found for: {lat_long}")
+        return []
+    
     def get_location_details(self, location_id: str, language: str = "fr", currency: str = "EUR") -> Optional[Dict[str, Any]]:
         """
         Récupérer les détails d'un lieu selon la documentation officielle
@@ -130,11 +163,23 @@ class TripAdvisorService:
     def search_attractions_by_query(self, query: str, **filters) -> List[Dict[str, Any]]:
         """
         Recherche d'attractions avec enrichissement des données
+        Supporte la recherche par texte et par coordonnées GPS
         """
         logger.info(f"🔍 search_attractions_by_query appelé avec query='{query}', filters={filters}")
         
+        # Vérifier si c'est une recherche par coordonnées GPS
+        lat_long = filters.get('latLong')
+        radius = filters.get('radius')
+        category = filters.get('category')
+        
         # 1. Recherche initiale
-        locations = self.search_locations(query, language="fr")
+        if lat_long:
+            logger.info(f"📍 Recherche par proximité: {lat_long}")
+            locations = self.nearby_search(lat_long, language="fr", radius=radius, category=category)
+        else:
+            logger.info(f"🔍 Recherche par texte: {query}")
+            locations = self.search_locations(query, language="fr")
+        
         logger.info(f"📋 search_locations retourné {len(locations)} résultats")
         
         if not locations:
@@ -160,6 +205,11 @@ class TripAdvisorService:
             # Formater l'attraction
             attraction = self._format_attraction(location, details, photos)
             if attraction:
+                # Ajouter les informations de proximité si disponibles
+                if 'distance' in location:
+                    attraction['distance'] = location.get('distance')
+                    attraction['bearing'] = location.get('bearing')
+                    
                 enriched_attractions.append(attraction)
                 logger.info(f"   ✅ Attraction formatée: {attraction.get('name')}")
             else:

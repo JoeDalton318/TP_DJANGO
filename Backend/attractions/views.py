@@ -5,8 +5,9 @@ from rest_framework.decorators import api_view
 from attractions.tripadvisor_service import tripadvisor_service
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 import logging
+import requests
 
 # Configuration du logger
 logging.basicConfig(level=logging.INFO)
@@ -413,102 +414,90 @@ def test_full_process(request):
         })
 
 
-@method_decorator(csrf_exempt, name='dispatch')
-class AttractionSearchView(APIView):
+@api_view(['GET'])
+def test_tripadvisor_nearby(request):
     """
-    API pour rechercher des attractions avec TripAdvisor API réelle
+    Endpoint de test pour vérifier l'API TripAdvisor nearby search
+    """
+    try:
+        # Coordonnées par défaut: Boston (exemple fourni)
+        lat_long = request.GET.get('latLong', '42.3455,-71.10767')
+        radius = request.GET.get('radius', '5')  # 5 km par défaut
+        category = request.GET.get('category', '')
+        
+        logger.info(f"🧪 Test TripAdvisor nearby avec latLong: {lat_long}")
+        
+        # Test direct de l'API
+        results = tripadvisor_service.nearby_search(lat_long, radius=radius, category=category)
+        
+        return JsonResponse({
+            'status': 'success',
+            'lat_long': lat_long,
+            'radius': radius,
+            'category': category,
+            'results_count': len(results),
+            'results': results[:3] if results else []  # Premiers résultats pour debug
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test nearby: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch') 
+class AttractionNearbyView(APIView):
+    """
+    API pour rechercher des attractions à proximité avec coordonnées GPS
+    Utilise: GET /location/nearby_search
     """
     
     def get(self, request):
         try:
-            # Récupérer les paramètres de recherche
-            query = request.query_params.get('q', '').strip()
-            country = request.query_params.get('country', '').strip()
-            limit = min(int(request.query_params.get('limit', 20)), 50)
+            # Paramètres obligatoires
+            latitude = request.query_params.get('latitude')
+            longitude = request.query_params.get('longitude')
             
-            if not query:
+            if not latitude or not longitude:
                 return Response({
-                    'count': 0,
-                    'data': []
-                })
+                    'detail': 'Les paramètres latitude et longitude sont obligatoires'
+                }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Service TripAdvisor RÉEL
-            service = get_tripadvisor_service()
+            # Paramètres optionnels
+            radius = request.query_params.get('radius', '5')  # 5km par défaut
+            category = request.query_params.get('category', '')
+            limit = min(int(request.query_params.get('limit', 10)), 20)
             
-            # Construire la requête
-            search_query = query
-            if country:
-                search_query = f"{query} {country}"
+            logger.info(f"🧭 Recherche proximité: lat={latitude}, lon={longitude}, radius={radius}")
             
-            # Recherche via TripAdvisor
-            results = service.search_locations(search_query)
+            # Construire latLong pour TripAdvisor API
+            lat_long = f"{latitude},{longitude}"
             
-            if not results:
-                return Response({
-                    'count': 0,
-                    'data': []
-                })
+            # Utiliser le service TripAdvisor nearby search
+            attractions = tripadvisor_service.nearby_search(lat_long, radius=radius, category=category)
             
-            # Traitement des résultats
-            attractions = []
-            for location in results[:limit]:
-                attraction = {
-                    'id': location.get('location_id'),
-                    'tripadvisor_id': location.get('location_id'),
-                    'name': location.get('name'),
-                    'city': location.get('address_obj', {}).get('city', ''),
-                    'country': location.get('address_obj', {}).get('country', ''),
-                    'category': self._determine_category(location),
-                    'rating': location.get('rating'),
-                    'num_reviews': location.get('num_reviews'),
-                    'main_image': self._extract_image_from_search(location),
-                    'location': [location.get('latitude'), location.get('longitude')] if location.get('latitude') else None
-                }
-                attractions.append(attraction)
+            # Limiter les résultats
+            limited_attractions = attractions[:limit]
             
-            return Response({
-                'count': len(attractions),
-                'data': attractions
-            })
+            response_data = {
+                'count': len(limited_attractions),
+                'total_count': len(attractions),
+                'latitude': float(latitude),
+                'longitude': float(longitude),
+                'radius_km': float(radius),
+                'data': limited_attractions
+            }
+            
+            logger.info(f"✅ Trouvé {len(limited_attractions)} attractions dans un rayon de {radius}km")
+            return Response(response_data)
             
         except Exception as e:
-            logger.error(f"Erreur lors de la recherche: {str(e)}")
+            logger.error(f"❌ Erreur AttractionNearbyView: {str(e)}")
             return Response({
-                'detail': f'Erreur lors de la recherche: {str(e)}'
+                'detail': f'Erreur lors de la recherche de proximité: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def _determine_category(self, location):
-        """Déterminer la catégorie d'une attraction"""
-        if 'category' in location:
-            category_name = location['category'].get('name', '').lower()
-            if 'restaurant' in category_name:
-                return 'restaurant'
-            elif 'hotel' in category_name:
-                return 'hotel'
-        return 'attraction'
-    
-    def _extract_image_from_search(self, location):
-        """Extraire l'image depuis les résultats de recherche"""
-        if 'photo' in location and isinstance(location['photo'], dict):
-            photo = location['photo']
-            if 'images' in photo and isinstance(photo['images'], dict):
-                images = photo['images']
-                for size in ['large', 'medium', 'small']:
-                    if size in images and isinstance(images[size], dict) and 'url' in images[size]:
-                        return images[size]['url']
-        return None
-
-
-@method_decorator(csrf_exempt, name='dispatch')
-class AttractionDetailView(APIView):
-    """
-    API pour récupérer les détails d'une attraction via TripAdvisor API réelle
-    """
-    
-    def get(self, request, tripadvisor_id):
-        try:
-            # Utiliser le service TripAdvisor réel
-            service = get_tripadvisor_service()
             
             # Obtenir les détails depuis TripAdvisor
             location_details = service.get_location_details(tripadvisor_id)
@@ -638,11 +627,8 @@ def search_suggestions(request):
         if not query or len(query) < 2:
             return JsonResponse({'suggestions': []})
         
-        # Service TripAdvisor RÉEL
-        service = get_tripadvisor_service()
-        
-        # Recherche de suggestions
-        results = service.search_locations(query)
+        # Utiliser le service TripAdvisor
+        results = tripadvisor_service.search_locations(query)
         
         if not results:
             return JsonResponse({'suggestions': []})
