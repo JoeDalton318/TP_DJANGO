@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator, EmptyPage
@@ -9,7 +9,7 @@ from django.db.models import Q
 
 from .models import Compilation, Attraction
 from .serializers import CompilationSerializer, AttractionSerializer
-from .tripadvisor_service import tripadvisor_service
+from attractions.tripadvisor_service import tripadvisor_service
 
 User = get_user_model()
 
@@ -415,48 +415,64 @@ class AttractionsViewSet(viewsets.ViewSet):
 
 class CompilationViewSet(viewsets.ViewSet):
     """ViewSet pour les compilations utilisateur"""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def _get_or_create_compilation(self, request_user):
-        if not request_user or not request_user.is_authenticated:
-            user, _ = User.objects.get_or_create(
-                username='guest',
-                defaults={'email': 'guest@example.com'}
-            )
-        else:
-            user = request_user
-        
-        compilation, _ = Compilation.objects.get_or_create(user=user)
+        compilation, created = Compilation.objects.get_or_create(user=request_user)
         return compilation
 
     def list(self, request):
-        """GET /api/compilation/?page=1"""
+        """GET /api/compilation/?page=1&ordering=budget ou distance"""
         try:
             compilation = self._get_or_create_compilation(request.user)
             page = int(request.query_params.get('page', 1))
+            ordering = request.query_params.get('ordering', '')
             
-            attractions = list(compilation.attractions.filter(is_active=True))
+            attractions_qs = compilation.attractions.filter(is_active=True)
+            
+            # Tri par budget
+            if ordering == 'budget_asc':
+                price_order = ['$', '$$', '$$$', '$$$$']
+                attractions_list = sorted(
+                    attractions_qs,
+                    key=lambda x: price_order.index(x.price_level) if x.price_level in price_order else 999
+                )
+            elif ordering == 'budget_desc':
+                price_order = ['$$$$', '$$$', '$$', '$']
+                attractions_list = sorted(
+                    attractions_qs,
+                    key=lambda x: price_order.index(x.price_level) if x.price_level in price_order else 999
+                )
+            # Tri par distance (ordre d'ajout comme itinéraire)
+            elif ordering == 'distance':
+                attractions_list = list(attractions_qs.order_by('id'))
+            else:
+                attractions_list = list(attractions_qs)
             
             # Pagination
-            paginator = Paginator(attractions, 15)
+            paginator = Paginator(attractions_list, 15)
             try:
                 paginated = paginator.page(page)
             except EmptyPage:
                 paginated = paginator.page(paginator.num_pages) if paginator.num_pages > 0 else paginator.page(1)
-
+            
+            # Calculer budget et distance
+            total_budget = compilation.calculate_total_budget()
+            total_distance = compilation.calculate_total_distance()
+            
             return Response({
-                'id': compilation.id,
-                'user': compilation.user.username,
-                'count': paginator.count,
-                'total_pages': paginator.num_pages,
-                'current_page': paginated.number,
-                'has_next': paginated.has_next(),
-                'has_previous': paginated.has_previous(),
-                'attractions': AttractionSerializer(paginated.object_list, many=True).data
+                'attractions': AttractionSerializer(paginated.object_list, many=True).data,
+                'budget_total': total_budget,
+                'total_distance': total_distance,
+                'pagination': {
+                    'count': paginator.count,
+                    'total_pages': paginator.num_pages,
+                    'current_page': paginated.number,
+                    'has_next': paginated.has_next(),
+                    'has_previous': paginated.has_previous(),
+                }
             })
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
@@ -466,19 +482,14 @@ class CompilationViewSet(viewsets.ViewSet):
             compilation = self._get_or_create_compilation(request.user)
             attraction_id = request.data.get('attraction_id')
             
-            if not attraction_id:
-                return Response(
-                    {'error': 'attraction_id requis'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
             attraction = get_object_or_404(Attraction, pk=attraction_id)
             compilation.attractions.add(attraction)
             
-            return Response(
-                {'message': f'{attraction.name} ajouté à votre compilation'},
-                status=status.HTTP_201_CREATED
-            )
+            return Response({
+                'message': f'{attraction.name} ajouté à votre compilation',
+                'budget_total': compilation.calculate_total_budget(),
+                'total_distance': compilation.calculate_total_distance()
+            })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -490,6 +501,10 @@ class CompilationViewSet(viewsets.ViewSet):
             attraction = get_object_or_404(Attraction, pk=pk)
             compilation.attractions.remove(attraction)
             
-            return Response({'message': f'{attraction.name} supprimé de votre compilation'})
+            return Response({
+                'message': f'{attraction.name} supprimé de votre compilation',
+                'budget_total': compilation.calculate_total_budget(),
+                'total_distance': compilation.calculate_total_distance()
+            })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

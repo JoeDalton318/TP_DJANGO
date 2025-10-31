@@ -1,18 +1,20 @@
 # users/urls.py
 
-from django.urls import path
-from .views import (
-    RegisterUserView,
-    LoginUserView,
-    SelectProfileView,
-    GetProfileView,
-    LogoutProfileView
-)
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from . import views
+
+router = DefaultRouter()
+router.register(r'profile', views.UserProfileViewSet, basename='user-profile')
 
 urlpatterns = [
-    path('auth/register/', RegisterUserView.as_view(), name='user-register'),
-    path('auth/login/', LoginUserView.as_view(), name='user-login'),
-    path('profile/select/', SelectProfileView.as_view(), name='select-profile'),
-    path('profile/me/', GetProfileView.as_view(), name='get-profile'),
-    path('profile/logout/', LogoutProfileView.as_view(), name='logout-profile'),
+    # Routes du ViewSet (profile/me/, profile/select_profile/)
+    path('users/', include(router.urls)),
+    
+    # Authentification
+    path('users/register/', views.register, name='user-register'),
+    path('users/logout/', views.logout, name='user-logout'),
+    path('users/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('users/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

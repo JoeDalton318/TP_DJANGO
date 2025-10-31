@@ -1,21 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-
-
-class UserProfile(models.Model):
-    """Profils utilisateur: local, touriste, professionnel"""
-    PROFILE_TYPES = [
-        ('local', 'Local'),
-        ('touriste', 'Touriste'),
-        ('professionnel', 'Professionnel'),
-    ]
-    
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    profile_type = models.CharField(max_length=20, choices=PROFILE_TYPES, default='touriste')
-    country = models.CharField(max_length=100, blank=True)
-    
-    def __str__(self):
-        return f"{self.user.username} - {self.get_profile_type_display()}"
+from math import radians, cos, sin, asin, sqrt
 
 
 class Attraction(models.Model):
@@ -81,12 +66,59 @@ class Attraction(models.Model):
 
 
 class Compilation(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='compilations')
-    attractions = models.ManyToManyField(Attraction, related_name='compilations')
-    date_created = models.DateTimeField(auto_now_add=True)
+    """Compilation d'attractions par utilisateur"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='compilation')
+    attractions = models.ManyToManyField(Attraction, related_name='compilations', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['-date_created']
+        db_table = 'compilations'
+        verbose_name = 'Compilation'
+        verbose_name_plural = 'Compilations'
     
     def __str__(self):
-        return f"Compilation de {self.user.username} ({self.attractions.count()} attractions)"
+        return f"Compilation de {self.user.username}"
+    
+    def calculate_total_budget(self):
+        """Calculer le budget total en fonction des price_level"""
+        price_mapping = {'$': 10, '$$': 30, '$$$': 60, '$$$$': 100}
+        total = 0
+        for attraction in self.attractions.all():
+            total += price_mapping.get(attraction.price_level, 0)
+        return total
+    
+    def calculate_total_distance(self):
+        """Calculer la distance totale entre attractions (itinéraire optimisé)"""
+        attractions_list = list(self.attractions.filter(
+            latitude__isnull=False, 
+            longitude__isnull=False
+        ).order_by('id'))
+        
+        if len(attractions_list) < 2:
+            return 0
+        
+        total_distance = 0
+        for i in range(len(attractions_list) - 1):
+            dist = self._haversine_distance(
+                attractions_list[i].latitude,
+                attractions_list[i].longitude,
+                attractions_list[i + 1].latitude,
+                attractions_list[i + 1].longitude
+            )
+            total_distance += dist
+        
+        return round(total_distance, 2)
+    
+    def _haversine_distance(self, lat1, lon1, lat2, lon2):
+        """Calculer la distance en km entre deux points GPS"""
+        R = 6371  # Rayon de la Terre en km
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        
+        return R * c

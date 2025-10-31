@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Container, Row, Col, Alert, Spinner, Card } from 'react-bootstrap';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Container, Row, Col, Card, Button, Alert, Form, Badge } from 'react-bootstrap';
+import { Trash2, DollarSign, Navigation } from 'lucide-react';
+import { compilationAPI } from '../services/api';
 import AttractionCard from '../components/AttractionCard';
-import SortButtons from '../components/SortButtons';
-import Pagination from '../components/Pagination';
-import CompilationMap from '../shared/CompilationMap';
-import api from '../services/api';
 
 export default function CompilationPage() {
   const [data, setData] = useState({ 
@@ -13,16 +11,16 @@ export default function CompilationPage() {
     total_distance: 0,
     pagination: { count: 0, total_pages: 1, current_page: 1 }
   });
-  const [sort, setSort] = useState('');
+  const [ordering, setOrdering] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async (sortOption = '', page = 1) => {
+  const load = useCallback(async (orderOption = '', page = 1) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await api.getCompilation(sortOption, page);
+      const result = await compilationAPI.getCompilation({ ordering: orderOption, page });
       setData(result);
       setCurrentPage(result.pagination?.current_page || 1);
     } catch (err) {
@@ -33,117 +31,131 @@ export default function CompilationPage() {
   }, []);
 
   useEffect(() => {
-    load(sort, currentPage);
-  }, [sort, currentPage, load]);
+    load(ordering, currentPage);
+  }, [ordering, currentPage, load]);
 
   const handleRemove = async (id) => {
-    if (!confirm('Supprimer cette attraction de votre compilation ?')) return;
+    if (!window.confirm('Supprimer cette attraction de votre compilation ?')) return;
+    
     try {
-      await api.removeAttraction(id);
-      await load(sort, currentPage);
+      await compilationAPI.removeAttraction(id);
+      load(ordering, currentPage);
     } catch (err) {
-      alert('Erreur lors de la suppression: ' + err.message);
+      alert('Erreur lors de la suppression');
     }
   };
 
-  const handleSortChange = (newSort) => {
-    setSort(newSort);
-    setCurrentPage(1);
-  };
-
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  if (loading) {
+    return (
+      <Container className="py-5 text-center">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Chargement...</span>
+        </div>
+      </Container>
+    );
+  }
 
   return (
-    <Container>
-      <Row className="mb-4">
-        <Col>
-          <h1 className="display-4 mb-3">📋 Ma Compilation</h1>
-        </Col>
-      </Row>
-
-      <Row className="mb-3">
-        <Col>
-          <SortButtons currentSort={sort} onSortChange={handleSortChange} />
-        </Col>
-      </Row>
-
-      <Row className="mb-4">
-        <Col md={6}>
-          <Card bg="light">
-            <Card.Body>
-              <Card.Title>💰 Budget Total</Card.Title>
-              <h3 className="mb-0">{data.budget_total ?? 0} €</h3>
-            </Card.Body>
-          </Card>
-        </Col>
-        {sort === 'distance' && (
-          <Col md={6}>
-            <Card bg="light">
-              <Card.Body>
-                <Card.Title>🚶 Distance Totale</Card.Title>
-                <h3 className="mb-0">{data.total_distance ?? 0} km</h3>
-              </Card.Body>
-            </Card>
-          </Col>
-        )}
-      </Row>
-
-      {loading && (
-        <div className="text-center py-5">
-          <Spinner animation="border" variant="primary" />
-          <p className="mt-3">Chargement...</p>
-        </div>
-      )}
+    <Container className="py-4">
+      <h1 className="mb-4">📋 Ma Compilation</h1>
 
       {error && (
         <Alert variant="danger">
-          <Alert.Heading>Erreur</Alert.Heading>
           <p>{error}</p>
         </Alert>
       )}
+
+      {/* Statistiques */}
+      <Row className="mb-4">
+        <Col md={4}>
+          <Card className="text-center">
+            <Card.Body>
+              <h5>Attractions</h5>
+              <h2>{data.pagination?.count || 0}</h2>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={4}>
+          <Card className="text-center">
+            <Card.Body>
+              <h5><DollarSign size={20} /> Budget Total</h5>
+              <h2>{data.budget_total || 0} €</h2>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={4}>
+          <Card className="text-center">
+            <Card.Body>
+              <h5><Navigation size={20} /> Distance Totale</h5>
+              <h2>{data.total_distance || 0} km</h2>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Filtres de tri */}
+      <Card className="mb-4">
+        <Card.Body>
+          <Form.Group>
+            <Form.Label>Trier par</Form.Label>
+            <Form.Select value={ordering} onChange={(e) => setOrdering(e.target.value)}>
+              <option value="">Par défaut</option>
+              <option value="budget_asc">Budget (croissant)</option>
+              <option value="budget_desc">Budget (décroissant)</option>
+              <option value="distance">Distance (itinéraire optimisé)</option>
+            </Form.Select>
+          </Form.Group>
+        </Card.Body>
+      </Card>
 
       {!loading && !error && (
         <>
           {data.pagination?.count === 0 ? (
             <Alert variant="info">
-              Votre compilation est vide. Ajoutez des attractions depuis la page d'accueil !
+              Votre compilation est vide. Ajoutez des attractions depuis la page de recherche !
             </Alert>
           ) : (
             <>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h2 className="h4 mb-0">
-                  Mes attractions ({data.pagination?.count ?? 0})
-                </h2>
-                <small className="text-muted">
-                  Page {data.pagination?.current_page ?? 1} sur {data.pagination?.total_pages ?? 1}
-                </small>
-              </div>
-
               <Row xs={1} md={2} lg={3} className="g-4 mb-4">
-                {(data.attractions ?? []).map((attraction) => (
+                {(data.attractions || []).map((attraction) => (
                   <Col key={attraction.id}>
-                    <AttractionCard 
-                      attraction={attraction} 
-                      onRemove={handleRemove}
-                      showRemoveButton={true}
-                    />
+                    <div className="position-relative">
+                      <AttractionCard attraction={attraction} />
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        className="position-absolute top-0 end-0 m-2"
+                        onClick={() => handleRemove(attraction.id)}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
                   </Col>
                 ))}
               </Row>
 
-              <Pagination
-                currentPage={data.pagination?.current_page ?? 1}
-                totalPages={data.pagination?.total_pages ?? 1}
-                onPageChange={handlePageChange}
-              />
-
-              <h2 className="h4 mb-3 mt-5">🗺️ Carte de votre itinéraire</h2>
-              <div style={{ height: '500px', borderRadius: '8px', overflow: 'hidden' }}>
-                <CompilationMap attractions={data.attractions ?? []} />
-              </div>
+              {/* Pagination */}
+              {data.pagination?.total_pages > 1 && (
+                <div className="d-flex justify-content-center gap-2">
+                  <Button
+                    variant="outline-primary"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                  >
+                    Précédent
+                  </Button>
+                  <span className="align-self-center">
+                    Page {currentPage} sur {data.pagination.total_pages}
+                  </span>
+                  <Button
+                    variant="outline-primary"
+                    disabled={currentPage >= data.pagination.total_pages}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                  >
+                    Suivant
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </>

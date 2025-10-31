@@ -32,10 +32,16 @@ const LandingPage = () => {
       if (token) {
         // Utilisateur connecté : mettre à jour le profil
         await authAPI.updateProfile({ profile_type: profileType, selected_country: selectedCountry });
+        navigate('/home');
+      } else {
+        // Utilisateur non connecté : rediriger vers la page d'inscription
+        navigate('/register', { 
+          state: { 
+            profile_type: profileType, 
+            selected_country: selectedCountry 
+          } 
+        });
       }
-      
-      // Rediriger vers la page d'accueil
-      navigate('/home');
     } catch (err) {
       setError('Erreur lors de la sélection du profil');
       console.error(err);

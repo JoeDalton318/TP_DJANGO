@@ -1,17 +1,55 @@
-import { useEffect, useState } from 'react';
-import { Container, Row, Col, Spinner, Alert, Form, Button } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Container, Row, Col, Alert, Form, Button, Spinner } from 'react-bootstrap';
+import AttractionsCarousel from '../components/AttractionsCarousel';
 import AttractionCard from '../components/AttractionCard';
 import Pagination from '../components/Pagination';
-import { attractionsAPI } from '../services/api';
+import { attractionsAPI, authAPI } from '../services/api';
 
 export default function HomePage() {
-  const [attractions, setAttractions] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const [popularAttractions, setPopularAttractions] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Charger le profil utilisateur
+      const profileData = await authAPI.getProfile();
+      setProfile(profileData);
+
+      // Charger les attractions populaires selon le pays sélectionné
+      const attractionsData = await attractionsAPI.getPopularAttractions({
+        country: profileData.selected_country,
+        page: 1,
+      });
+
+      setPopularAttractions(attractionsData.results || []);
+      setTotalPages(attractionsData.total_pages || 1);
+      setTotalCount(attractionsData.count || 0);
+    } catch (err) {
+      setError('Erreur lors du chargement des données');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAttractionClick = (attraction) => {
+    navigate(`/attraction/${attraction.id || attraction.tripadvisor_id}`);
+  };
 
   const loadAttractions = async (query = '', page = 1) => {
     try {
@@ -20,24 +58,23 @@ export default function HomePage() {
       
       const data = query 
         ? await attractionsAPI.searchAttractions({ q: query, page })
-        : await attractionsAPI.getPopularAttractions({ page });
+        : await attractionsAPI.getPopularAttractions({ 
+            country: profile?.selected_country, 
+            page 
+          });
       
-      setAttractions(data.results ?? []);
-      setTotalPages(data.total_pages ?? 1);
-      setTotalCount(data.count ?? 0);
+      setPopularAttractions(data.results || []);
+      setTotalPages(data.total_pages || 1);
+      setTotalCount(data.count || 0);
       setCurrentPage(page);
     } catch (err) {
       console.error('Erreur chargement:', err);
       setError(err.message);
-      setAttractions([]);
+      setPopularAttractions([]);
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadAttractions('', 1);
-  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -50,82 +87,104 @@ export default function HomePage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  if (loading && !profile) {
+    return (
+      <Container className="py-5 text-center">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Chargement...</span>
+        </div>
+      </Container>
+    );
+  }
+
   return (
     <Container className="py-4">
-      <Row className="mb-4">
-        <Col>
-          <h1 className="display-4 mb-3">🌍 Découvrez les attractions</h1>
-          
-          <Form onSubmit={handleSearch} className="mb-4">
-            <Row>
-              <Col md={9}>
-                <Form.Control
-                  type="text"
-                  placeholder="Rechercher un pays, une ville, une catégorie... (vide = toutes)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  size="lg"
-                />
-              </Col>
-              <Col md={3}>
-                <Button type="submit" variant="primary" size="lg" className="w-100">
-                  🔍 Rechercher
-                </Button>
-              </Col>
-            </Row>
-          </Form>
-        </Col>
-      </Row>
+      {/* En-tête avec profil */}
+      <div className="mb-4">
+        <h1 className="display-4">
+          🌍 Bienvenue, {profile?.profile_type === 'tourist' ? 'voyageur' : profile?.profile_type === 'local' ? 'local' : 'professionnel'} !
+        </h1>
+        <p className="lead text-muted">
+          Découvrez les meilleures attractions en {profile?.selected_country}
+        </p>
+      </div>
 
-      {loading && (
+      {error && (
+        <Alert variant="danger">{error}</Alert>
+      )}
+
+      {/* Barre de recherche */}
+      <Form onSubmit={handleSearch} className="mb-4">
+        <Row>
+          <Col md={9}>
+            <Form.Control
+              type="text"
+              placeholder="Rechercher un pays, une ville, une catégorie..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              size="lg"
+            />
+          </Col>
+          <Col md={3}>
+            <Button type="submit" variant="primary" size="lg" className="w-100">
+              🔍 Rechercher
+            </Button>
+          </Col>
+        </Row>
+      </Form>
+
+      {/* Carrousel des attractions populaires */}
+      {!searchQuery && popularAttractions.length > 0 && (
+        <>
+          <h2 className="mb-3">🌟 Attractions les plus populaires</h2>
+          <AttractionsCarousel 
+            attractions={popularAttractions.slice(0, 5)} 
+            onAttractionClick={handleAttractionClick}
+          />
+        </>
+      )}
+
+      {/* Liste des résultats */}
+      {loading ? (
         <div className="text-center py-5">
           <Spinner animation="border" variant="primary" />
           <p className="mt-3">Chargement des attractions...</p>
         </div>
-      )}
-
-      {error && (
-        <Alert variant="danger">
-          <Alert.Heading>Erreur</Alert.Heading>
-          <p>{error}</p>
-        </Alert>
-      )}
-
-      {!loading && !error && (
+      ) : (
         <>
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h2 className="h4 mb-0">
-              {searchQuery ? `Résultats pour "${searchQuery}"` : 'Attractions populaires'} 
+          <div className="d-flex justify-content-between align-items-center mb-3 mt-5">
+            <h3>
+              {searchQuery ? `Résultats pour "${searchQuery}"` : 'Toutes les attractions'} 
               {' '}({totalCount})
-            </h2>
+            </h3>
             <small className="text-muted">
               Page {currentPage} sur {totalPages}
             </small>
           </div>
           
-          {attractions.length === 0 ? (
+          {popularAttractions.length === 0 ? (
             <Alert variant="info">
-              <p className="mb-0">
-                Aucune attraction trouvée. 
-                {!searchQuery && ' Essayez de chercher "Paris", "Rome", "London"...'}
-              </p>
+              Aucune attraction trouvée. 
+              {!searchQuery && ' Essayez de rechercher "Paris", "Rome", "London"...'}
             </Alert>
           ) : (
             <>
               <Row xs={1} md={2} lg={3} xl={4} className="g-4">
-                {attractions.map((attraction) => (
-                  <Col key={attraction.id}>
+                {popularAttractions.map((attraction) => (
+                  <Col key={attraction.id} onClick={() => handleAttractionClick(attraction)}>
                     <AttractionCard attraction={attraction} />
                   </Col>
                 ))}
               </Row>
 
               {totalPages > 1 && (
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={handlePageChange}
-                />
+                <div className="mt-4">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </div>
               )}
             </>
           )}

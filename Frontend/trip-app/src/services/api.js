@@ -1,165 +1,139 @@
 import axios from 'axios';
 
-// Configuration de base pour l'API Django
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 35000, // Augmenté à 35s pour correspondre au backend
+  timeout: 35000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Intercepteur pour gérer les erreurs
+// Intercepteur pour ajouter le token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Intercepteur pour gérer le refresh token
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    console.error('API Error:', error);
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        const response = await axios.post(`${API_BASE_URL}/users/token/refresh/`, {
+          refresh: refreshToken,
+        });
+
+        localStorage.setItem('accessToken', response.data.access);
+        originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
+
+        return api(originalRequest);
+      } catch (refreshError) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
     return Promise.reject(error);
   }
 );
 
+// Services pour l'authentification
+export const authAPI = {
+  register: async (data) => {
+    const response = await api.post('/users/register/', data);
+    return response.data;
+  },
+
+  login: async (data) => {
+    const response = await api.post('/users/login/', data);
+    localStorage.setItem('accessToken', response.data.access);
+    localStorage.setItem('refreshToken', response.data.refresh);
+    return response.data;
+  },
+
+  logout: async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    await api.post('/users/logout/', { refresh: refreshToken });
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+  },
+
+  getProfile: async () => {
+    const response = await api.get('/users/profile/me/');
+    return response.data;
+  },
+
+  updateProfile: async (data) => {
+    const response = await api.post('/users/profile/select_profile/', data);
+    return response.data;
+  },
+};
+
 // Services pour les attractions
 export const attractionsAPI = {
-  // Recherche d'attractions avec filtres
   searchAttractions: async (params = {}) => {
-    try {
-      const response = await api.get('/attractions/search/', { params });
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la recherche: ${error.message}`);
-    }
+    const response = await api.get('/attractions/search/', { params });
+    return response.data;
   },
 
-  // Attractions populaires
   getPopularAttractions: async (params = {}) => {
-    try {
-      const response = await api.get('/attractions/popular/', { params });
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des attractions populaires: ${error.message}`);
-    }
+    const response = await api.get('/attractions/popular/', { params });
+    return response.data;
   },
 
-  // Détails d'une attraction
-  getAttractionDetails: async (attractionId) => {
-    try {
-      const response = await api.get(`/attractions/${attractionId}/`);
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des détails: ${error.message}`);
-    }
-  },
-
-  // Suggestions de recherche
-  getSearchSuggestions: async (query) => {
-    try {
-      const response = await api.get('/attractions/suggestions/', {
-        params: { q: query }
-      });
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des suggestions: ${error.message}`);
-    }
-  },
-
-  // Catégories disponibles
-  getCategories: async () => {
-    try {
-      const response = await api.get('/attractions/categories/');
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des catégories: ${error.message}`);
-    }
-  },
-
-  // Pays disponibles
-  getCountries: async () => {
-    try {
-      const response = await api.get('/attractions/countries/');
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des pays: ${error.message}`);
-    }
-  },
-
-  // Recherche par proximité GPS
   getNearbyAttractions: async (params = {}) => {
-    try {
-      const response = await api.get('/attractions/nearby/', { params });
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la recherche par proximité: ${error.message}`);
-    }
+    const response = await api.get('/attractions/nearby/', { params });
+    return response.data;
   },
 
-  // Nouveaux endpoints pour filtres avancés
-  getCuisines: async () => {
-    try {
-      const response = await api.get('/attractions/cuisines/');
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des cuisines: ${error.message}`);
-    }
+  getAttractionById: async (id) => {
+    const response = await api.get(`/attractions/${id}/`);
+    return response.data;
   },
 
-  getHotelStyles: async () => {
-    try {
-      const response = await api.get('/attractions/hotel-styles/');
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des styles d'hôtels: ${error.message}`);
-    }
+  getCategories: async () => {
+    const response = await api.get('/attractions/categories/');
+    return response.data;
   },
 
-  getAttractionTypes: async () => {
-    try {
-      const response = await api.get('/attractions/attraction-types/');
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération des types d'attractions: ${error.message}`);
-    }
+  getCountries: async () => {
+    const response = await api.get('/attractions/countries/');
+    return response.data;
   },
 };
 
 // Services pour les compilations
 export const compilationAPI = {
-  // Récupérer la compilation de l'utilisateur
   getCompilation: async (params = {}) => {
-    try {
-      const response = await api.get('/compilation/', { params });
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la récupération de la compilation: ${error.message}`);
-    }
+    const response = await api.get('/compilation/list/', { params });
+    return response.data;
   },
 
-  // Ajouter une attraction à la compilation
   addAttraction: async (attractionId) => {
-    try {
-      const response = await api.post('/compilation/add/', {
-        attraction_id: attractionId
-      });
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de l'ajout: ${error.message}`);
-    }
+    const response = await api.post('/compilation/add/', { attraction_id: attractionId });
+    return response.data;
   },
 
-  // Supprimer une attraction de la compilation
   removeAttraction: async (attractionId) => {
-    try {
-      const response = await api.delete(`/compilation/${attractionId}/remove/`);
-      return response.data;
-    } catch (error) {
-      throw new Error(`Erreur lors de la suppression: ${error.message}`);
-    }
+    const response = await api.delete(`/compilation/${attractionId}/remove/`);
+    return response.data;
   },
 };
 
-// Export par défaut de l'instance axios
 export default api;
-
-// Export nommé pour compatibilité
-export { api };

@@ -1,20 +1,18 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.decorators import api_view
-from attractions.tripadvisor_service import tripadvisor_service
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse, HttpResponse
+from django.shortcuts import get_object_or_404
 import logging
 import requests
 
-from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
 from .models import Attraction
 from .serializers import AttractionDetailSerializer
-from services.tripadvisor import get_location_details
-from services.tripadvisor import get_reviews_for_location
+from .tripadvisor_service import tripadvisor_service
 
 # Configuration du logger
 logging.basicConfig(level=logging.INFO)
@@ -239,6 +237,7 @@ def search_suggestions(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def categories(request):
     """
     API pour obtenir les catégories d'attractions disponibles
@@ -260,6 +259,7 @@ def categories(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def countries(request):
     """
     API pour obtenir la liste des pays disponibles
