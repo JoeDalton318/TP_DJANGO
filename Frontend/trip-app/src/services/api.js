@@ -123,4 +123,43 @@ export const attractionsAPI = {
   },
 };
 
+// Services pour les compilations
+export const compilationAPI = {
+  // Récupérer la compilation de l'utilisateur
+  getCompilation: async (params = {}) => {
+    try {
+      const response = await api.get('/compilation/', { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(`Erreur lors de la récupération de la compilation: ${error.message}`);
+    }
+  },
+
+  // Ajouter une attraction à la compilation
+  addAttraction: async (attractionId) => {
+    try {
+      const response = await api.post('/compilation/add/', {
+        attraction_id: attractionId
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(`Erreur lors de l'ajout: ${error.message}`);
+    }
+  },
+
+  // Supprimer une attraction de la compilation
+  removeAttraction: async (attractionId) => {
+    try {
+      const response = await api.delete(`/compilation/${attractionId}/remove/`);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Erreur lors de la suppression: ${error.message}`);
+    }
+  },
+};
+
+// Export par défaut de l'instance axios
 export default api;
+
+// Export nommé pour compatibilité
+export { api };

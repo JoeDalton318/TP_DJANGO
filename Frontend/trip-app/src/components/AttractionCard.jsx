@@ -3,7 +3,6 @@ import { Star, MapPin, Users, Camera, ExternalLink, Award, Heart, Calendar } fro
 
 const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => {
   const {
-    id,
     name,
     description,
     city,

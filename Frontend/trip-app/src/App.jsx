@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Map, List, Loader, AlertCircle, Globe } from 'lucide-react';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import './index.css';
+import './index.css'; 
+
+import { Route, Routes } from 'react-router-dom';
+import NavigationBar from './components/NavigationBar';
+import HomePage from './pages/HomePage';
+import CompilationPage from './pages/CompilationPage';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
 
 // Composants
 import SearchBar from './components/SearchBar';
@@ -14,6 +21,8 @@ import Pagination from './components/Pagination';
 import { attractionsAPI } from './services/api';
 
 function App() {
+  
+  <NavigationBar />
   // États principaux
   const [attractions, setAttractions] = useState([]);
   const [countries, setCountries] = useState([]);
@@ -334,7 +343,7 @@ function App() {
           <div className="row align-items-center">
             <div className="col">
               <h1 className="h3 mb-0 d-flex align-items-center">
-                <Globe className="me-2" size={32} />
+                <Map className="me-2" size={24} />
                 Trip Explorer
               </h1>
               <small>Découvrez les meilleures attractions avec TripAdvisor</small>
@@ -347,7 +356,7 @@ function App() {
                   className={`btn ${viewMode === 'list' ? 'btn-light' : 'btn-outline-light'}`}
                   onClick={() => setViewMode('list')}
                 >
-                  <List size={16} className="me-1" />
+                
                   Liste
                 </button>
                 <button
