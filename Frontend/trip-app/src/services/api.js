@@ -84,6 +84,16 @@ export const attractionsAPI = {
     }
   },
 
+  // Recherche par proximité GPS
+  getNearbyAttractions: async (params = {}) => {
+    try {
+      const response = await api.get('/attractions/nearby/', { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(`Erreur lors de la recherche par proximité: ${error.message}`);
+    }
+  },
+
   // Nouveaux endpoints pour filtres avancés
   getCuisines: async () => {
     try {

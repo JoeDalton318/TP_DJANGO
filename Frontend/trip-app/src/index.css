@@ -4,21 +4,251 @@ body {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  background-color: #ffffff;
+  background-color: #f8f9fa;
   color: #213547;
 }
 
-/* Styles supplémentaires pour l'application */
+/* Styles pour l'application Trip Explorer */
+
+/* Cartes d'attractions */
 .attraction-card {
-  transition: transform 0.2s ease-in-out;
+  transition: all 0.3s ease;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .attraction-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 
 /* Assurer que les images ont une taille cohérente */
 .card-img-top {
   object-fit: cover;
   height: 200px;
+  transition: transform 0.3s ease;
+}
+
+.attraction-card:hover .card-img-top {
+  transform: scale(1.05);
+}
+
+/* Container principal avec hauteur minimum */
+.min-vh-100 {
+  min-height: 100vh;
+}
+
+/* Styles pour la barre de recherche */
+.search-container {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+}
+
+.search-container .input-group {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.search-container .form-control {
+  border: none;
+  font-size: 1.1rem;
+  padding: 0.75rem 1rem;
+}
+
+.search-container .form-control:focus {
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.search-container .btn {
+  border: none;
+  padding: 0.75rem 1rem;
+}
+
+/* Header styles */
+header {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+}
+
+/* Responsive pour mobile */
+@media (max-width: 768px) {
+  .search-container {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .search-container .input-group {
+    flex-direction: column;
+  }
+  
+  .search-container .btn {
+    border-radius: 0;
+    margin-top: 0.5rem;
+  }
+  
+  .search-container .btn:first-of-type {
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+  }
+  
+  .search-container .btn:last-of-type {
+    border-bottom-left-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
+  }
+}
+
+/* Spinner custom */
+.spinner-border {
+  animation: spinner-border 0.75s linear infinite;
+}
+
+/* Badge personnalisé */
+.badge {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* Styles pour le modal */
+.modal-content {
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.modal-header {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border-bottom: none;
+}
+
+.modal-header .btn-close {
+  filter: invert(1);
+}
+
+/* Styles pour les étoiles */
+.text-warning {
+  color: #ffc107 !important;
+}
+
+/* Amélioration des cartes */
+.leaflet-container {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Styles pour les filtres */
+.card {
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Animation pour les transitions */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading state */
+.loading-state {
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(5px);
+}
+
+/* Grid responsive pour les attractions */
+.attractions-grid {
+  gap: 1.5rem;
+}
+
+@media (max-width: 576px) {
+  .attractions-grid {
+    gap: 1rem;
+  }
+}
+
+/* Footer styles */
+footer {
+  margin-top: auto;
+}
+
+/* Amélioration des boutons */
+.btn-primary {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+}
+
+/* Styles pour les badges de distance */
+.badge.bg-success {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+}
+
+/* Amélioration des alertes */
+.alert {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0056b3;
+}
+
+/* Utilité pour le centrage vertical */
+.d-flex.align-items-center {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Styles pour l'état vide */
+.empty-state {
+  color: #6c757d;
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+/* Responsive design pour les images */
+@media (max-width: 768px) {
+  .card-img-top {
+    height: 180px;
+  }
+}
+
+@media (max-width: 576px) {
+  .card-img-top {
+    height: 160px;
+  }
 }
