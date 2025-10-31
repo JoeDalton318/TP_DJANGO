@@ -77,7 +77,7 @@ class AttractionSearchView(APIView):
             country = request.query_params.get('country', '').strip()
             category = request.query_params.get('category', '').strip()
             
-            # Récupérer les filtres avancés
+            # Récupérer les filtres avancés et pagination
             min_rating = request.query_params.get('min_rating')
             max_rating = request.query_params.get('max_rating')
             min_reviews = request.query_params.get('min_reviews')
@@ -85,7 +85,10 @@ class AttractionSearchView(APIView):
             price_level = request.query_params.get('price_level', '').strip()
             opening_period = request.query_params.get('opening_period', '').strip()
             ordering = request.query_params.get('ordering', '-rating').strip()
-            limit = min(int(request.query_params.get('limit', 20)), 50)
+            
+            # Paramètres de pagination
+            page = max(int(request.query_params.get('page', 1)), 1)
+            limit = max(min(int(request.query_params.get('limit', 20)), 100), 1)  # Max 100, min 1
             
             logger.info(f"🔍 AttractionSearchView - Paramètres reçus: query='{query}', country='{country}', filtres avancés actifs")
             
@@ -102,7 +105,7 @@ class AttractionSearchView(APIView):
             
             logger.info(f"🔍 Recherche: '{search_query}' avec filtres avancés")
             
-            # Préparer TOUS les filtres
+            # Préparer TOUS les filtres (sans doublons)
             filters = {}
             if city:
                 filters['city'] = city
@@ -124,14 +127,6 @@ class AttractionSearchView(APIView):
                 filters['opening_period'] = opening_period
             if ordering:
                 filters['ordering'] = ordering
-            if max_rating:
-                filters['max_rating'] = max_rating
-            if min_reviews:
-                filters['min_reviews'] = min_reviews
-            if price_level:
-                filters['price_level'] = price_level
-            if ordering:
-                filters['ordering'] = ordering
             
             logger.info(f"📋 Filtres préparés: {filters}")
             
@@ -141,16 +136,27 @@ class AttractionSearchView(APIView):
             
             logger.info(f"📊 Service retourné {len(attractions)} attractions")
             
-            # Limiter les résultats
-            limited_attractions = attractions[:limit]
+            # Pagination
+            total_count = len(attractions)
+            start_index = (page - 1) * limit
+            end_index = start_index + limit
+            paginated_attractions = attractions[start_index:end_index]
+            
+            # Calculer les métadonnées de pagination
+            total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
             
             response_data = {
-                'count': len(limited_attractions),
-                'total_count': len(attractions),
-                'data': limited_attractions
+                'count': len(paginated_attractions),
+                'total_count': total_count,
+                'page': page,
+                'limit': limit,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
+                'data': paginated_attractions
             }
             
-            logger.info(f"✅ Trouvé {len(limited_attractions)} attractions pour '{search_query}'")
+            logger.info(f"✅ Trouvé {len(paginated_attractions)} attractions (page {page}/{total_pages}) pour '{search_query}'")
             return Response(response_data)
             
         except Exception as e:
@@ -481,10 +487,11 @@ class AttractionNearbyView(APIView):
                     'detail': 'Les paramètres latitude et longitude sont obligatoires'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Paramètres optionnels de base
+            # Paramètres optionnels et pagination
             radius = request.query_params.get('radius', '5')  # 5km par défaut
             category = request.query_params.get('category', '')
-            limit = min(int(request.query_params.get('limit', 10)), 20)
+            page = max(int(request.query_params.get('page', 1)), 1)
+            limit = max(min(int(request.query_params.get('limit', 20)), 100), 1)
             
             # Paramètres de filtres avancés
             min_rating = request.query_params.get('min_rating')
@@ -492,6 +499,7 @@ class AttractionNearbyView(APIView):
             min_reviews = request.query_params.get('min_reviews')
             min_photos = request.query_params.get('min_photos')
             price_level = request.query_params.get('price_level')
+            ordering = request.query_params.get('ordering', '-rating')
             
             logger.info(f"🧭 Recherche proximité avec filtres: lat={latitude}, lon={longitude}, radius={radius}")
             
@@ -512,23 +520,36 @@ class AttractionNearbyView(APIView):
                 filters['min_photos'] = min_photos
             if price_level:
                 filters['price_level'] = price_level
+            if ordering:
+                filters['ordering'] = ordering
             
             # Utiliser le service TripAdvisor nearby search avec filtres
             attractions = tripadvisor_service.nearby_search(lat_long, radius=radius, **filters)
             
-            # Limiter les résultats
-            limited_attractions = attractions[:limit]
+            # Pagination
+            total_count = len(attractions)
+            start_index = (page - 1) * limit
+            end_index = start_index + limit
+            paginated_attractions = attractions[start_index:end_index]
+            
+            # Calculer les métadonnées de pagination
+            total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
             
             response_data = {
-                'count': len(limited_attractions),
-                'total_count': len(attractions),
+                'count': len(paginated_attractions),
+                'total_count': total_count,
+                'page': page,
+                'limit': limit,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
                 'latitude': float(latitude),
                 'longitude': float(longitude),
                 'radius_km': float(radius),
-                'data': limited_attractions
+                'data': paginated_attractions
             }
             
-            logger.info(f"✅ Trouvé {len(limited_attractions)} attractions dans un rayon de {radius}km")
+            logger.info(f"✅ Trouvé {len(paginated_attractions)} attractions (page {page}/{total_pages}) dans un rayon de {radius}km")
             return Response(response_data)
             
         except Exception as e:
@@ -907,3 +928,62 @@ def proxy_image(request):
     except Exception as e:
         logger.error(f"Erreur proxy image: {str(e)}")
         return HttpResponse(f'Erreur serveur: {str(e)}', status=500)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AttractionPhotosView(APIView):
+    """
+    API pour récupérer les photos d'une attraction via TripAdvisor API
+    """
+    
+    def get(self, request, location_id):
+        try:
+            logger.info(f"🔍 Récupération photos pour attraction: {location_id}")
+            
+            # Récupérer les photos via TripAdvisor
+            photos = tripadvisor_service.get_location_photos(location_id, language="fr")
+            
+            if not photos:
+                return Response({
+                    'error': 'Aucune photo trouvée',
+                    'location_id': location_id,
+                    'photos': []
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Formater les photos pour le frontend
+            formatted_photos = []
+            for photo in photos:
+                images = photo.get('images', {})
+                formatted_photo = {
+                    'id': photo.get('id'),
+                    'caption': photo.get('caption', ''),
+                    'published_date': photo.get('published_date'),
+                    'urls': {
+                        'thumbnail': images.get('thumbnail', {}).get('url', ''),
+                        'small': images.get('small', {}).get('url', ''),
+                        'medium': images.get('medium', {}).get('url', ''),
+                        'large': images.get('large', {}).get('url', ''),
+                        'original': images.get('original', {}).get('url', '')
+                    },
+                    'user': {
+                        'username': photo.get('user', {}).get('username', ''),
+                        'location': photo.get('user', {}).get('location', '')
+                    }
+                }
+                formatted_photos.append(formatted_photo)
+            
+            logger.info(f"✅ {len(formatted_photos)} photos récupérées pour {location_id}")
+            
+            return Response({
+                'location_id': location_id,
+                'total_photos': len(formatted_photos),
+                'photos': formatted_photos
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur récupération photos {location_id}: {str(e)}")
+            return Response({
+                'error': f'Erreur lors de la récupération des photos: {str(e)}',
+                'location_id': location_id,
+                'photos': []
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

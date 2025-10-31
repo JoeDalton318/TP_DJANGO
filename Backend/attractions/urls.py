@@ -25,6 +25,9 @@ urlpatterns = [
     path('test/tripadvisor/nearby/', views.test_tripadvisor_nearby, name='test_nearby'),
     path('test/full-process/', views.test_full_process, name='test_full_process'),
     
+    # Photos d'une attraction (avant le pattern générique)
+    path('photos/<str:location_id>/', views.AttractionPhotosView.as_view(), name='photos'),
+    
     # Détail d'une attraction (doit être en dernier)
     path('<str:tripadvisor_id>/', views.AttractionDetailView.as_view(), name='detail'),
 ]

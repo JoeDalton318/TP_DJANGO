@@ -502,7 +502,10 @@ class TripAdvisorService:
         # Filtre par niveau de prix
         if filters.get('price_level'):
             try:
-                price_level = int(filters['price_level'])
+                price_level = filters['price_level']
+                # Gérer les cas string et int
+                if isinstance(price_level, str) and price_level.isdigit():
+                    price_level = int(price_level)
                 filtered = [a for a in filtered if a.get('price_level') == price_level]
             except (ValueError, TypeError):
                 pass
@@ -516,18 +519,6 @@ class TripAdvisorService:
             elif period in ['weekdays', 'weekends', 'holidays']:
                 # Garder tous pour simulation (nécessiterait API temps réel)
                 pass
-        
-        # Filtre par nombre minimum d'avis
-        if filters.get('min_reviews'):
-            try:
-                min_reviews = int(filters['min_reviews'])
-                filtered = [a for a in filtered if a['num_reviews'] >= min_reviews]
-            except (ValueError, TypeError):
-                pass
-        
-        # Filtre par niveau de prix
-        if filters.get('price_level'):
-            filtered = [a for a in filtered if a['price_level'] == filters['price_level']]
         
         # Tri des résultats
         ordering = filters.get('ordering', '-num_reviews')

@@ -8,6 +8,7 @@ import SearchBar from './components/SearchBar';
 import AttractionCard from './components/AttractionCard';
 import MapView from './components/MapView';
 import AttractionModal from './components/AttractionModal';
+import Pagination from './components/Pagination';
 
 // Services
 import { attractionsAPI } from './services/api';
@@ -25,6 +26,16 @@ function App() {
   const [lastSearch, setLastSearch] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [isLocationSearch, setIsLocationSearch] = useState(false);
+  
+  // États pour la pagination
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    limit: 20,
+    hasNext: false,
+    hasPrevious: false
+  });
   
   // États pour le modal
   const [selectedAttraction, setSelectedAttraction] = useState(null);
@@ -67,41 +78,67 @@ function App() {
       // Charger les attractions populaires par défaut (France ou pays détecté)
       const attractionsData = await attractionsAPI.getPopularAttractions({ 
         country: defaultCountry, 
-        limit: 12 
+        limit: 20,
+        page: 1
       });
       
       setAttractions(attractionsData.data || []);
+      setPagination({
+        currentPage: attractionsData.page || 1,
+        totalPages: attractionsData.total_pages || 1,
+        totalCount: attractionsData.total_count || 0,
+        limit: attractionsData.limit || 20,
+        hasNext: attractionsData.has_next || false,
+        hasPrevious: attractionsData.has_previous || false
+      });
       setLastSearch({ type: 'popular', country: defaultCountry });
       
     } catch (err) {
       console.error('Erreur chargement attractions par région:', err);
       // Fallback: charger sans filtre pays
       try {
-        const fallbackData = await attractionsAPI.getPopularAttractions({ limit: 12 });
+        const fallbackData = await attractionsAPI.getPopularAttractions({ limit: 20, page: 1 });
         setAttractions(fallbackData.data || []);
+        setPagination({
+          currentPage: fallbackData.page || 1,
+          totalPages: fallbackData.total_pages || 1,
+          totalCount: fallbackData.total_count || 0,
+          limit: fallbackData.limit || 20,
+          hasNext: fallbackData.has_next || false,
+          hasPrevious: fallbackData.has_previous || false
+        });
         setLastSearch({ type: 'popular', country: 'global' });
       } catch (fallbackErr) {
         console.error('Erreur fallback:', fallbackErr);
         setError('Impossible de charger les attractions populaires');
+        setPagination({
+          currentPage: 1,
+          totalPages: 1,
+          totalCount: 0,
+          limit: 20,
+          hasNext: false,
+          hasPrevious: false
+        });
       }
     }
   };
 
-  // Recherche textuelle
-  const handleSearch = async (searchParams) => {
+  // Recherche textuelle avec pagination
+  const handleSearch = async (searchParams, page = 1) => {
     try {
       setLoading(true);
       setError(null);
       setIsLocationSearch(false);
       setUserLocation(null);
       
-      console.log('🔍 Recherche textuelle avec filtres:', searchParams);
+      console.log('🔍 Recherche textuelle avec filtres:', searchParams, 'page:', page);
       
-      // Construire les paramètres de recherche avec tous les filtres
+      // Construire les paramètres de recherche avec tous les filtres et pagination
       const searchRequest = {
         query: searchParams.query,
         country: searchParams.country,
         category: searchParams.category,
+        page: page,
         limit: 20
       };
 
@@ -116,6 +153,14 @@ function App() {
       const results = await attractionsAPI.searchAttractions(searchRequest);
       
       setAttractions(results.data || []);
+      setPagination({
+        currentPage: results.page || 1,
+        totalPages: results.total_pages || 1,
+        totalCount: results.total_count || 0,
+        limit: results.limit || 20,
+        hasNext: results.has_next || false,
+        hasPrevious: results.has_previous || false
+      });
       setLastSearch({ ...searchParams, type: 'search' });
       
     } catch (err) {
@@ -126,14 +171,14 @@ function App() {
     }
   };
 
-  // Recherche géolocalisée
-  const handleLocationSearch = async (locationParams) => {
+  // Recherche géolocalisée avec pagination
+  const handleLocationSearch = async (locationParams, page = 1) => {
     try {
       setLoading(true);
       setError(null);
       setIsLocationSearch(true);
       
-      console.log('🧭 Recherche géolocalisée avec filtres:', locationParams);
+      console.log('🧭 Recherche géolocalisée avec filtres:', locationParams, 'page:', page);
       
       // Sauvegarder la position de l'utilisateur
       setUserLocation({
@@ -146,6 +191,7 @@ function App() {
         latitude: locationParams.latitude,
         longitude: locationParams.longitude,
         radius: locationParams.radius || 5,
+        page: page,
         limit: 20
       };
 
@@ -160,6 +206,14 @@ function App() {
       const results = await attractionsAPI.getNearbyAttractions(locationRequest);
       
       setAttractions(results.data || []);
+      setPagination({
+        currentPage: results.page || 1,
+        totalPages: results.total_pages || 1,
+        totalCount: results.total_count || 0,
+        limit: results.limit || 20,
+        hasNext: results.has_next || false,
+        hasPrevious: results.has_previous || false
+      });
       setLastSearch({ ...locationParams, type: 'location' });
       
     } catch (err) {
@@ -167,6 +221,45 @@ function App() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Gérer le changement de page
+  const handlePageChange = async (newPage) => {
+    if (loading || newPage === pagination.currentPage) return;
+    
+    // Refaire la dernière recherche avec la nouvelle page
+    if (lastSearch) {
+      if (lastSearch.type === 'location') {
+        await handleLocationSearch(lastSearch, newPage);
+      } else if (lastSearch.type === 'search') {
+        await handleSearch(lastSearch, newPage);
+      } else if (lastSearch.type === 'popular') {
+        // Gérer la pagination pour les attractions populaires
+        try {
+          setLoading(true);
+          const attractionsData = await attractionsAPI.getPopularAttractions({ 
+            country: lastSearch.country, 
+            limit: 20,
+            page: newPage
+          });
+          
+          setAttractions(attractionsData.data || []);
+          setPagination({
+            currentPage: attractionsData.page || newPage,
+            totalPages: attractionsData.total_pages || 1,
+            totalCount: attractionsData.total_count || 0,
+            limit: attractionsData.limit || 20,
+            hasNext: attractionsData.has_next || false,
+            hasPrevious: attractionsData.has_previous || false
+          });
+        } catch (err) {
+          console.error('Erreur pagination populaires:', err);
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }
     }
   };
 
@@ -340,6 +433,16 @@ function App() {
                 </div>
               </div>
             )}
+            
+            {/* Pagination */}
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              totalCount={pagination.totalCount}
+              limit={pagination.limit}
+              onPageChange={handlePageChange}
+              loading={loading}
+            />
           </>
         )}
       </main>

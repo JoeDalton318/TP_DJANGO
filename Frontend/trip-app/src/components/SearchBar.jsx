@@ -8,14 +8,13 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
   const [showFilters, setShowFilters] = useState(false);
   const [useLocation, setUseLocation] = useState(false);
   
-  // Filtres avancés
+  // Filtres avancés basés sur les données réelles de l'API
   const [radius, setRadius] = useState(5);
   const [minRating, setMinRating] = useState('');
   const [minReviews, setMinReviews] = useState('');
   const [minPhotos, setMinPhotos] = useState('');
   const [priceLevel, setPriceLevel] = useState('');
-  const [openingPeriod, setOpeningPeriod] = useState('');
-  const [ordering, setOrdering] = useState('-rating');
+  const [ordering, setOrdering] = useState('-num_reviews');
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -63,7 +62,6 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
       min_reviews: minReviews,
       min_photos: minPhotos,
       price_level: priceLevel,
-      opening_period: openingPeriod,
       ordering: ordering
     });
   };
@@ -78,11 +76,17 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
     setMinReviews('');
     setMinPhotos('');
     setPriceLevel('');
-    setOpeningPeriod('');
-    setOrdering('-rating');
+    setOrdering('-num_reviews');
   };
 
-  const hasAdvancedFilters = minRating || minReviews || minPhotos || priceLevel || openingPeriod || ordering !== '-rating' || (useLocation && radius !== 5);
+  const hasAdvancedFilters = minRating || minReviews || minPhotos || priceLevel || ordering !== '-num_reviews' || (useLocation && radius !== 5);
+
+  // Catégories disponibles basées sur les données réelles
+  const realCategories = [
+    { id: 'attraction', name: 'Attractions' },
+    { id: 'hotel', name: 'Hôtels' },
+    { id: 'restaurant', name: 'Restaurants' }
+  ];
 
   return (
     <div className="search-container mb-4">
@@ -140,21 +144,6 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
             {/* Filtres de base */}
             <div className="row g-3 mb-3">
               <div className="col-md-6">
-                <label className="form-label">Pays</label>
-                <select
-                  className="form-select"
-                  value={selectedCountry}
-                  onChange={(e) => setSelectedCountry(e.target.value)}
-                >
-                  <option value="">Tous les pays</option>
-                  {countries.map(country => (
-                    <option key={country.code} value={country.name}>
-                      {country.name_fr || country.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-6">
                 <label className="form-label">Catégorie</label>
                 <select
                   className="form-select"
@@ -162,12 +151,22 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
                   onChange={(e) => setSelectedCategory(e.target.value)}
                 >
                   <option value="">Toutes les catégories</option>
-                  {categories.map(category => (
+                  {realCategories.map(category => (
                     <option key={category.id} value={category.id}>
-                      {category.name_fr || category.name}
+                      {category.name}
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Pays (optionnel)</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="ex: France, Italie..."
+                  value={selectedCountry}
+                  onChange={(e) => setSelectedCountry(e.target.value)}
+                />
               </div>
             </div>
 
@@ -192,7 +191,7 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
 
             {/* Filtres avancés */}
             <hr />
-            <h6 className="mb-3">Filtres avancés</h6>
+            <h6 className="mb-3">Filtres de qualité</h6>
             
             <div className="row g-3 mb-3">
               <div className="col-md-4">
@@ -203,26 +202,25 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
                   onChange={(e) => setMinRating(e.target.value)}
                 >
                   <option value="">Toutes les notes</option>
-                  <option value="1">⭐ 1+ étoile</option>
-                  <option value="2">⭐ 2+ étoiles</option>
-                  <option value="3">⭐ 3+ étoiles</option>
-                  <option value="4">⭐ 4+ étoiles</option>
+                  <option value="3.0">⭐ 3.0+ étoiles</option>
+                  <option value="3.5">⭐ 3.5+ étoiles</option>
+                  <option value="4.0">⭐ 4.0+ étoiles</option>
                   <option value="4.5">⭐ 4.5+ étoiles</option>
                 </select>
               </div>
               <div className="col-md-4">
-                <label className="form-label">Reviews minimum</label>
+                <label className="form-label">Avis minimum</label>
                 <select
                   className="form-select"
                   value={minReviews}
                   onChange={(e) => setMinReviews(e.target.value)}
                 >
                   <option value="">Tous les nombres</option>
-                  <option value="10">10+ avis</option>
                   <option value="50">50+ avis</option>
                   <option value="100">100+ avis</option>
                   <option value="500">500+ avis</option>
                   <option value="1000">1000+ avis</option>
+                  <option value="5000">5000+ avis</option>
                 </select>
               </div>
               <div className="col-md-4">
@@ -233,10 +231,10 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
                   onChange={(e) => setMinPhotos(e.target.value)}
                 >
                   <option value="">Tous les nombres</option>
-                  <option value="1">1+ photo</option>
-                  <option value="3">3+ photos</option>
                   <option value="5">5+ photos</option>
                   <option value="10">10+ photos</option>
+                  <option value="50">50+ photos</option>
+                  <option value="100">100+ photos</option>
                 </select>
               </div>
             </div>
@@ -257,35 +255,15 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
                 </select>
               </div>
               <div className="col-md-6">
-                <label className="form-label">Période d'ouverture</label>
-                <select
-                  className="form-select"
-                  value={openingPeriod}
-                  onChange={(e) => setOpeningPeriod(e.target.value)}
-                >
-                  <option value="">Toutes les périodes</option>
-                  <option value="open_now">Ouvert maintenant</option>
-                  <option value="weekdays">En semaine</option>
-                  <option value="weekends">Week-ends</option>
-                  <option value="holidays">Jours fériés</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="row g-3 mb-3">
-              <div className="col-md-12">
                 <label className="form-label">Trier par</label>
                 <select
                   className="form-select"
                   value={ordering}
                   onChange={(e) => setOrdering(e.target.value)}
                 >
-                  <option value="-rating">⭐ Meilleures notes d'abord</option>
-                  <option value="rating">⭐ Notes les plus basses d'abord</option>
                   <option value="-num_reviews">💬 Plus d'avis d'abord</option>
-                  <option value="num_reviews">💬 Moins d'avis d'abord</option>
+                  <option value="-rating">⭐ Meilleures notes d'abord</option>
                   <option value="ranking">🏆 Meilleur classement</option>
-                  <option value="-ranking">🏆 Moins bien classées</option>
                   <option value="name">🔤 Nom A-Z</option>
                   <option value="-name">🔤 Nom Z-A</option>
                 </select>
