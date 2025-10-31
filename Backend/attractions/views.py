@@ -1,303 +1,789 @@
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.db.models import Q
-from django.conf import settings
-from .models import Attraction
-from .serializers import (
-    AttractionSerializer, 
-    AttractionCardSerializer, 
-    AttractionSearchSerializer
-)
+from attractions.tripadvisor_service import tripadvisor_service
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.http import JsonResponse
+import logging
 
-# Import des services
-from .services import tripadvisor_service as mock_service
-try:
-    from .tripadvisor_service import tripadvisor_real_service as real_service
-except ImportError:
-    real_service = None
-
-# Choisir le service à utiliser selon la configuration
-def get_tripadvisor_service():
-    api_key = getattr(settings, 'TRIPADVISOR_API_KEY', '')
-    # Temporairement, forcer l'utilisation du service mock
-    # même si on a une clé API, car la clé semble invalide
-    # if real_service and api_key and api_key != 'your-tripadvisor-api-key-here':
-    #     return real_service
-    return mock_service
+# Configuration du logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-class AttractionSearchView(APIView):
-    """
-    API de recherche d'attractions avec filtres avancés (version mockée)
-    
-    Paramètres de recherche:
-    - query: Recherche dans le nom et la description
-    - category: Filtre par catégorie (restaurant, hotel, attraction)
-    - city: Filtre par ville
-    - country: Filtre par pays
-    - min_rating, max_rating: Filtres par note
-    - min_reviews: Nombre minimum de reviews
-    - min_photos: Nombre minimum de photos
-    - price_level: Niveau de prix ($, $$, $$$, $$$$)
-    - latitude, longitude, radius: Recherche géographique
-    - profile: Profil utilisateur (local, tourist, professional)
-    - ordering: Tri (-num_likes, rating, -rating, name, -name)
-    """
-    
-    def get(self, request):
-        # Récupérer les paramètres de recherche
-        serializer = AttractionSearchSerializer(data=request.query_params)
-        if serializer.is_valid():
-            filters = serializer.validated_data
-        else:
-            filters = {}
-        
-        # Utiliser le service approprié pour la recherche
-        service = get_tripadvisor_service()
-        mock_results = service.search_attractions(filters)
-        
-        # Pagination manuelle
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
-        start = (page - 1) * page_size
-        end = start + page_size
-        
-        paginated_results = mock_results[start:end]
-        
-        # Sérialiser les résultats
-        response_data = []
-        for mock_data in paginated_results:
-            # Convertir les données mockées au format attendu
-            response_data.append({
-                'id': mock_data.get('tripadvisor_id'),
-                'tripadvisor_id': mock_data.get('tripadvisor_id'),
-                'name': mock_data.get('name'),
-                'city': mock_data.get('city'),
-                'country': mock_data.get('country'),
-                'category': mock_data.get('category'),
-                'rating': mock_data.get('rating'),
-                'num_reviews': mock_data.get('num_reviews'),
-                'price_level': mock_data.get('price_level'),
-                'main_image': mock_data.get('main_image'),
-                'location': [mock_data.get('latitude'), mock_data.get('longitude')] if mock_data.get('latitude') else None
-            })
-        
-        # Format de réponse avec pagination
-        return Response({
-            'count': len(mock_results),
-            'page': page,
-            'page_size': page_size,
-            'results': response_data
-        })
-
-
+@method_decorator(csrf_exempt, name='dispatch')
 class PopularAttractionsView(APIView):
     """
-    API pour récupérer les attractions les plus populaires (version mockée)
-    
-    Paramètres:
-    - country: Filtre par pays
-    - profile: Profil utilisateur (local, tourist, professional)
-    - limit: Nombre d'attractions à retourner (défaut: 20)
+    API pour récupérer les attractions populaires via TripAdvisor API officielle
+    Utilise: GET /location/search et GET /location/{id}/details
     """
     
     def get(self, request):
-        country = request.query_params.get('country')
-        profile = request.query_params.get('profile')
-        limit = int(request.query_params.get('limit', 20))
-        
-        # Utiliser le service approprié
-        service = get_tripadvisor_service()
-        mock_results = service.get_popular_attractions(
-            country=country,
-            profile=profile,
-            limit=limit
-        )
-        
-        # Sérialiser les résultats
-        response_data = []
-        for mock_data in mock_results:
-            response_data.append({
-                'id': mock_data.get('tripadvisor_id'),
-                'tripadvisor_id': mock_data.get('tripadvisor_id'),
-                'name': mock_data.get('name'),
-                'city': mock_data.get('city'),
-                'country': mock_data.get('country'),
-                'category': mock_data.get('category'),
-                'rating': mock_data.get('rating'),
-                'num_reviews': mock_data.get('num_reviews'),
-                'price_level': mock_data.get('price_level'),
-                'main_image': mock_data.get('main_image'),
-                'location': [mock_data.get('latitude'), mock_data.get('longitude')] if mock_data.get('latitude') else None
-            })
-        
-        return Response(response_data)
+        try:
+            # Paramètres de la requête
+            country = request.query_params.get('country', 'France').strip()
+            limit = min(int(request.query_params.get('limit', 10)), 20)
+            page = int(request.query_params.get('page', 1))
+            
+            logger.info(f"🔍 Recherche attractions populaires: {country}, limit={limit}, page={page}")
+            
+            # Utiliser le service TripAdvisor refactorisé
+            attractions = tripadvisor_service.get_popular_attractions(country=country, limit=limit)
+            
+            # Pagination simple
+            start_index = (page - 1) * limit
+            end_index = start_index + limit
+            paginated_attractions = attractions[start_index:end_index]
+            
+            total_count = len(attractions)
+            total_pages = (total_count + limit - 1) // limit
+            
+            response_data = {
+                'count': len(paginated_attractions),
+                'total_count': total_count,
+                'page': page,
+                'limit': limit,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
+                'data': paginated_attractions
+            }
+            
+            logger.info(f"✅ Retourné {len(paginated_attractions)} attractions populaires")
+            return Response(response_data)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur PopularAttractionsView: {str(e)}")
+            return Response({
+                'detail': f'Erreur lors de la récupération des attractions populaires: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
+class AttractionSearchView(APIView):
+    """
+    API pour rechercher des attractions avec filtres
+    Utilise: GET /location/search et GET /location/{id}/details
+    """
+    
+    def get(self, request):
+        try:
+            # Récupérer les paramètres de recherche
+            query = request.query_params.get('query', '').strip()
+            city = request.query_params.get('city', '').strip()
+            country = request.query_params.get('country', '').strip()
+            category = request.query_params.get('category', '').strip()
+            min_rating = request.query_params.get('min_rating')
+            max_rating = request.query_params.get('max_rating')
+            min_reviews = request.query_params.get('min_reviews')
+            price_level = request.query_params.get('price_level', '').strip()
+            ordering = request.query_params.get('ordering', '-rating').strip()
+            limit = min(int(request.query_params.get('limit', 20)), 50)
+            
+            logger.info(f"🔍 AttractionSearchView - Paramètres reçus: query='{query}', city='{city}', country='{country}'")
+            
+            # Construire la requête de recherche
+            search_terms = []
+            if query:
+                search_terms.append(query)
+            if city:
+                search_terms.append(city)
+            if country:
+                search_terms.append(country)
+            
+            search_query = ' '.join(search_terms) if search_terms else 'attractions'
+            
+            logger.info(f"🔍 Recherche: '{search_query}' avec filtres: category={category}, min_rating={min_rating}")
+            
+            # Préparer les filtres
+            filters = {}
+            if city:
+                filters['city'] = city
+            if country:
+                filters['country'] = country
+            if category:
+                filters['category'] = category
+            if min_rating:
+                filters['min_rating'] = min_rating
+            if max_rating:
+                filters['max_rating'] = max_rating
+            if min_reviews:
+                filters['min_reviews'] = min_reviews
+            if price_level:
+                filters['price_level'] = price_level
+            if ordering:
+                filters['ordering'] = ordering
+            
+            logger.info(f"📋 Filtres préparés: {filters}")
+            
+            # Recherche avec le service TripAdvisor
+            logger.info(f"📡 Appel search_attractions_by_query avec: '{search_query}'")
+            attractions = tripadvisor_service.search_attractions_by_query(search_query, **filters)
+            
+            logger.info(f"📊 Service retourné {len(attractions)} attractions")
+            
+            # Limiter les résultats
+            limited_attractions = attractions[:limit]
+            
+            response_data = {
+                'count': len(limited_attractions),
+                'total_count': len(attractions),
+                'data': limited_attractions
+            }
+            
+            logger.info(f"✅ Trouvé {len(limited_attractions)} attractions pour '{search_query}'")
+            return Response(response_data)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur AttractionSearchView: {str(e)}")
+            return Response({
+                'detail': f'Erreur lors de la recherche: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
 class AttractionDetailView(APIView):
     """
-    API pour récupérer les détails d'une attraction (version mockée)
+    API pour récupérer les détails d'une attraction
+    Utilise: GET /location/{location_id}/details et GET /location/{location_id}/photos
     """
     
     def get(self, request, tripadvisor_id):
-        # Utiliser le service approprié
-        service = get_tripadvisor_service()
-        mock_data = service.get_attraction_by_id(tripadvisor_id)
-        
-        if not mock_data:
-            return Response({'detail': 'Attraction not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-        return Response(mock_data)
+        try:
+            logger.info(f"🏛️  Récupération détails pour location_id: {tripadvisor_id}")
+            
+            # Récupérer l'attraction par ID
+            attraction = tripadvisor_service.get_attraction_by_id(tripadvisor_id)
+            
+            if not attraction:
+                logger.warning(f"⚠️  Attraction {tripadvisor_id} non trouvée")
+                return Response({
+                    'detail': 'Attraction non trouvée'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            logger.info(f"✅ Détails récupérés pour: {attraction.get('name')}")
+            return Response(attraction)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur AttractionDetailView: {str(e)}")
+            return Response({
+                'detail': f'Erreur lors de la récupération des détails: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# ============= APIs UTILITAIRES =============
 
 @api_view(['GET'])
 def search_suggestions(request):
     """
     API pour obtenir des suggestions de recherche
     """
-    query = request.query_params.get('q', '')
-    
-    if len(query) < 2:
-        return Response([])
-    
-    # Rechercher dans les noms de villes et attractions
-    suggestions = []
-    
-    # Utiliser les données selon le service disponible
-    service = get_tripadvisor_service()
-    
-    # Si c'est le service mock, utiliser les données mockées
-    if hasattr(service, 'mock_attractions'):
-        mock_attractions = service.mock_attractions
+    try:
+        query = request.GET.get('q', '').strip()
         
-        cities = set()
-        attractions = set()
+        if not query or len(query) < 2:
+            return JsonResponse({'suggestions': []})
         
-        for attraction in mock_attractions:
-            if query.lower() in attraction['city'].lower():
-                cities.add(attraction['city'])
-            if query.lower() in attraction['name'].lower():
-                attractions.add(attraction['name'])
+        # Recherche de base pour les suggestions
+        results = tripadvisor_service.search_locations(query)
         
-        # Limiter les suggestions
-        suggestions.extend([{'type': 'city', 'name': city} for city in list(cities)[:5]])
-        suggestions.extend([{'type': 'attraction', 'name': name} for name in list(attractions)[:10]])
-    else:
-        # Pour le service réel, faire une recherche TripAdvisor
-        try:
-            results = service.search_locations(query)
-            for result in results[:15]:
-                suggestion_type = 'attraction'
-                if result.get('address_obj', {}).get('city'):
-                    suggestion_type = 'city'
-                suggestions.append({
-                    'type': suggestion_type,
-                    'name': result.get('name', '')
-                })
-        except Exception:
-            pass  # Retourner une liste vide en cas d'erreur
-    
-    return Response(suggestions[:15])
+        # Formater les suggestions
+        suggestions = []
+        for location in results[:8]:  # Limiter à 8 suggestions
+            suggestion = {
+                'name': location.get('name', ''),
+                'location_id': location.get('location_id'),
+                'address': location.get('address_obj', {}).get('address_string', ''),
+                'city': location.get('address_obj', {}).get('city', ''),
+                'country': location.get('address_obj', {}).get('country', '')
+            }
+            suggestions.append(suggestion)
+        
+        return JsonResponse({'suggestions': suggestions})
+        
+    except Exception as e:
+        logger.error(f"Erreur suggestions: {str(e)}")
+        return JsonResponse({'suggestions': []})
 
 
 @api_view(['GET'])
 def categories(request):
     """
-    API pour obtenir la liste des catégories disponibles avec icônes et descriptions
+    API pour obtenir les catégories d'attractions disponibles
     """
-    categories = [
-        {
-            'value': 'restaurant', 
-            'label': 'Restaurants', 
-            'icon': 'restaurant',
-            'description': 'Découvrez les meilleurs restaurants',
-            'count': 150  # Sera dynamique plus tard
-        },
-        {
-            'value': 'hotel', 
-            'label': 'Hôtels', 
-            'icon': 'hotel',
-            'description': 'Trouvez votre hébergement idéal',
-            'count': 85
-        },
-        {
-            'value': 'attraction', 
-            'label': 'Attractions touristiques', 
-            'icon': 'camera',
-            'description': 'Explorez les sites incontournables',
-            'count': 265
-        },
+    categories_list = [
+        {'id': 'attraction', 'name': 'Attractions', 'name_fr': 'Attractions'},
+        {'id': 'restaurant', 'name': 'Restaurants', 'name_fr': 'Restaurants'},
+        {'id': 'hotel', 'name': 'Hotels', 'name_fr': 'Hôtels'},
+        {'id': 'museum', 'name': 'Museums', 'name_fr': 'Musées'},
+        {'id': 'park', 'name': 'Parks', 'name_fr': 'Parcs'},
+        {'id': 'monument', 'name': 'Monuments', 'name_fr': 'Monuments'},
+        {'id': 'entertainment', 'name': 'Entertainment', 'name_fr': 'Divertissement'},
+        {'id': 'shopping', 'name': 'Shopping', 'name_fr': 'Shopping'},
+        {'id': 'nightlife', 'name': 'Nightlife', 'name_fr': 'Vie nocturne'},
+        {'id': 'outdoor', 'name': 'Outdoor Activities', 'name_fr': 'Activités extérieures'}
     ]
     
-    return Response(categories)
+    return JsonResponse({'categories': categories_list})
 
 
 @api_view(['GET'])
 def countries(request):
     """
-    API pour obtenir la liste des pays disponibles avec informations enrichies
+    API pour obtenir la liste des pays disponibles
     """
-    service = get_tripadvisor_service()
+    countries_list = [
+        # Pays principaux avec couverture TripAdvisor
+        {'code': 'FR', 'name': 'France', 'name_fr': 'France'},
+        {'code': 'ES', 'name': 'Spain', 'name_fr': 'Espagne'},
+        {'code': 'IT', 'name': 'Italy', 'name_fr': 'Italie'},
+        {'code': 'GB', 'name': 'United Kingdom', 'name_fr': 'Royaume-Uni'},
+        {'code': 'DE', 'name': 'Germany', 'name_fr': 'Allemagne'},
+        {'code': 'US', 'name': 'United States', 'name_fr': 'États-Unis'},
+        {'code': 'CA', 'name': 'Canada', 'name_fr': 'Canada'},
+        {'code': 'JP', 'name': 'Japan', 'name_fr': 'Japon'},
+        {'code': 'AU', 'name': 'Australia', 'name_fr': 'Australie'},
+        {'code': 'BR', 'name': 'Brazil', 'name_fr': 'Brésil'},
+        {'code': 'CN', 'name': 'China', 'name_fr': 'Chine'},
+        {'code': 'IN', 'name': 'India', 'name_fr': 'Inde'},
+        {'code': 'TH', 'name': 'Thailand', 'name_fr': 'Thaïlande'},
+        {'code': 'MX', 'name': 'Mexico', 'name_fr': 'Mexique'},
+        {'code': 'EG', 'name': 'Egypt', 'name_fr': 'Égypte'},
+        {'code': 'ZA', 'name': 'South Africa', 'name_fr': 'Afrique du Sud'},
+        {'code': 'NL', 'name': 'Netherlands', 'name_fr': 'Pays-Bas'},
+        {'code': 'BE', 'name': 'Belgium', 'name_fr': 'Belgique'},
+        {'code': 'CH', 'name': 'Switzerland', 'name_fr': 'Suisse'},
+        {'code': 'AT', 'name': 'Austria', 'name_fr': 'Autriche'}
+    ]
     
-    # Si c'est le service mock, extraire des données mockées
-    if hasattr(service, 'mock_attractions'):
-        mock_attractions = service.mock_attractions
-        countries_data = {}
+    return JsonResponse({'countries': countries_list})
+
+
+# ============= TESTS D'API =============
+
+@api_view(['GET'])
+def test_tripadvisor_search(request):
+    """
+    Endpoint de test pour vérifier l'API TripAdvisor search
+    """
+    try:
+        query = request.GET.get('q', 'paris')
         
-        for attraction in mock_attractions:
-            country = attraction['country']
-            if country not in countries_data:
-                countries_data[country] = {
-                    'value': country,
-                    'label': country,
+        logger.info(f"🧪 Test TripAdvisor search avec query: {query}")
+        
+        # Test direct de l'API
+        results = tripadvisor_service.search_locations(query)
+        
+        return JsonResponse({
+            'status': 'success',
+            'query': query,
+            'results_count': len(results),
+            'results': results[:3] if results else []  # Premiers résultats pour debug
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test search: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+
+@api_view(['GET'])
+def test_tripadvisor_details(request):
+    """
+    Endpoint de test pour vérifier l'API TripAdvisor details
+    """
+    try:
+        location_id = request.GET.get('location_id', '187147')  # Paris par défaut
+        
+        logger.info(f"🧪 Test TripAdvisor details avec location_id: {location_id}")
+        
+        # Test direct de l'API
+        details = tripadvisor_service.get_location_details(location_id)
+        
+        if details:
+            return JsonResponse({
+                'status': 'success',
+                'location_id': location_id,
+                'name': details.get('name'),
+                'details': details
+            })
+        else:
+            return JsonResponse({
+                'status': 'not_found',
+                'location_id': location_id,
+                'message': 'Location not found'
+            })
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test details: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+
+@api_view(['GET'])
+def test_tripadvisor_photos(request):
+    """
+    Endpoint de test pour vérifier l'API TripAdvisor photos
+    """
+    try:
+        location_id = request.GET.get('location_id', '6678144')  # The Peninsula Paris
+        
+        logger.info(f"🧪 Test TripAdvisor photos avec location_id: {location_id}")
+        
+        # Test direct de l'API
+        photos = tripadvisor_service.get_location_photos(location_id)
+        
+        return JsonResponse({
+            'status': 'success',
+            'location_id': location_id,
+            'photos_count': len(photos),
+            'photos': photos[:2] if photos else []  # Premières photos pour debug
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test photos: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+
+@api_view(['GET'])
+def test_full_process(request):
+    """
+    Endpoint de test pour vérifier tout le processus de recherche et formatage
+    """
+    try:
+        query = request.GET.get('q', 'louvre')
+        
+        logger.info(f"🧪 Test processus complet avec query: {query}")
+        
+        # 1. Test recherche de base
+        locations = tripadvisor_service.search_locations(query)
+        logger.info(f"📋 Étape 1 - Locations trouvées: {len(locations)}")
+        
+        if not locations:
+            return JsonResponse({
+                'status': 'no_locations',
+                'message': 'Aucune location trouvée'
+            })
+        
+        # 2. Test formatage pour la première location
+        first_location = locations[0]
+        location_id = first_location.get('location_id')
+        
+        logger.info(f"🏛️ Étape 2 - Test location: {first_location.get('name')} (ID: {location_id})")
+        
+        # 3. Récupérer détails et photos
+        details = tripadvisor_service.get_location_details(location_id) if location_id else None
+        photos = tripadvisor_service.get_location_photos(location_id) if location_id else []
+        
+        logger.info(f"📋 Étape 3 - Détails: {'✅' if details else '❌'}, Photos: {len(photos)}")
+        
+        # 4. Test formatage
+        formatted = tripadvisor_service._format_attraction(first_location, details, photos)
+        
+        logger.info(f"🎯 Étape 4 - Formatage: {'✅' if formatted else '❌'}")
+        
+        return JsonResponse({
+            'status': 'success',
+            'query': query,
+            'step1_locations_count': len(locations),
+            'step2_first_location': {
+                'name': first_location.get('name'),
+                'location_id': location_id
+            },
+            'step3_details_found': bool(details),
+            'step3_photos_count': len(photos),
+            'step4_formatted': bool(formatted),
+            'formatted_result': formatted if formatted else None
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test processus: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AttractionSearchView(APIView):
+    """
+    API pour rechercher des attractions avec TripAdvisor API réelle
+    """
+    
+    def get(self, request):
+        try:
+            # Récupérer les paramètres de recherche
+            query = request.query_params.get('q', '').strip()
+            country = request.query_params.get('country', '').strip()
+            limit = min(int(request.query_params.get('limit', 20)), 50)
+            
+            if not query:
+                return Response({
                     'count': 0,
-                    'cities': set()
+                    'data': []
+                })
+            
+            # Service TripAdvisor RÉEL
+            service = get_tripadvisor_service()
+            
+            # Construire la requête
+            search_query = query
+            if country:
+                search_query = f"{query} {country}"
+            
+            # Recherche via TripAdvisor
+            results = service.search_locations(search_query)
+            
+            if not results:
+                return Response({
+                    'count': 0,
+                    'data': []
+                })
+            
+            # Traitement des résultats
+            attractions = []
+            for location in results[:limit]:
+                attraction = {
+                    'id': location.get('location_id'),
+                    'tripadvisor_id': location.get('location_id'),
+                    'name': location.get('name'),
+                    'city': location.get('address_obj', {}).get('city', ''),
+                    'country': location.get('address_obj', {}).get('country', ''),
+                    'category': self._determine_category(location),
+                    'rating': location.get('rating'),
+                    'num_reviews': location.get('num_reviews'),
+                    'main_image': self._extract_image_from_search(location),
+                    'location': [location.get('latitude'), location.get('longitude')] if location.get('latitude') else None
                 }
-            countries_data[country]['count'] += 1
-            countries_data[country]['cities'].add(attraction['city'])
+                attractions.append(attraction)
+            
+            return Response({
+                'count': len(attractions),
+                'data': attractions
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la recherche: {str(e)}")
+            return Response({
+                'detail': f'Erreur lors de la recherche: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _determine_category(self, location):
+        """Déterminer la catégorie d'une attraction"""
+        if 'category' in location:
+            category_name = location['category'].get('name', '').lower()
+            if 'restaurant' in category_name:
+                return 'restaurant'
+            elif 'hotel' in category_name:
+                return 'hotel'
+        return 'attraction'
+    
+    def _extract_image_from_search(self, location):
+        """Extraire l'image depuis les résultats de recherche"""
+        if 'photo' in location and isinstance(location['photo'], dict):
+            photo = location['photo']
+            if 'images' in photo and isinstance(photo['images'], dict):
+                images = photo['images']
+                for size in ['large', 'medium', 'small']:
+                    if size in images and isinstance(images[size], dict) and 'url' in images[size]:
+                        return images[size]['url']
+        return None
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AttractionDetailView(APIView):
+    """
+    API pour récupérer les détails d'une attraction via TripAdvisor API réelle
+    """
+    
+    def get(self, request, tripadvisor_id):
+        try:
+            # Utiliser le service TripAdvisor réel
+            service = get_tripadvisor_service()
+            
+            # Obtenir les détails depuis TripAdvisor
+            location_details = service.get_location_details(tripadvisor_id)
+            
+            if not location_details:
+                return Response({'detail': 'Attraction not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Extraire l'image principale
+            main_image = self._extract_main_image(location_details)
+            
+            # Adresse et localisation
+            address_obj = location_details.get('address_obj', {})
+            
+            # Coordonnées
+            latitude = location_details.get('latitude')
+            longitude = location_details.get('longitude')
+            location_coords = None
+            if latitude and longitude:
+                try:
+                    location_coords = [float(latitude), float(longitude)]
+                except (ValueError, TypeError):
+                    location_coords = None
+            
+            # Convertir au format attendu
+            response_data = {
+                'id': location_details.get('location_id'),
+                'tripadvisor_id': location_details.get('location_id'),
+                'name': location_details.get('name', ''),
+                'city': address_obj.get('city', ''),
+                'country': address_obj.get('country', ''),
+                'category': self._map_category_from_details(location_details),
+                'rating': location_details.get('rating'),
+                'num_reviews': location_details.get('num_reviews'),
+                'price_level': location_details.get('price_level'),
+                'main_image': main_image,
+                'location': location_coords,
+                'description': location_details.get('description', ''),
+                'website': location_details.get('website'),
+                'phone': location_details.get('phone'),
+                'hours': location_details.get('hours', {}),
+                'cuisine': location_details.get('cuisine', []),
+                'dietary_restrictions': location_details.get('dietary_restrictions', [])
+            }
+            
+            return Response(response_data)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération des détails: {str(e)}")
+            return Response({
+                'detail': f'Erreur lors de la récupération des détails: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _extract_main_image(self, location_details):
+        """Extraire l'image principale depuis les détails de localisation"""
+        # Méthode 1: Depuis les photos de l'objet
+        if 'photos' in location_details and location_details['photos']:
+            image_url = self._extract_image_from_photos(location_details['photos'])
+            if image_url:
+                return image_url
         
-        # Convertir en liste et ajouter le nombre de villes
-        countries_list = []
-        for country_data in countries_data.values():
-            country_data['cities_count'] = len(country_data['cities'])
-            country_data['cities'] = list(country_data['cities'])[:5]  # Top 5 villes
-            countries_list.append(country_data)
+        # Méthode 2: Depuis l'objet photo principal
+        if 'photo' in location_details and isinstance(location_details['photo'], dict):
+            photo = location_details['photo']
+            
+            # Structure avec images multiples
+            if 'images' in photo and isinstance(photo['images'], dict):
+                images = photo['images']
+                # Préférer l'image 'large' ou 'original'
+                for size in ['large', 'original', 'medium', 'small']:
+                    if size in images and isinstance(images[size], dict) and 'url' in images[size]:
+                        image_url = images[size]['url']
+                        if image_url and isinstance(image_url, str):
+                            return image_url
+            
+            # URL directe dans la photo
+            if 'url' in photo and isinstance(photo['url'], str):
+                return photo['url']
         
-        countries_list.sort(key=lambda x: x['count'], reverse=True)
-        return Response(countries_list)
-    else:
-        # Pour le service réel, retourner une liste prédéfinie enrichie
-        common_countries = [
-            {'value': 'France', 'label': 'France', 'count': 120, 'cities': ['Paris', 'Lyon', 'Marseille']},
-            {'value': 'United States', 'label': 'États-Unis', 'count': 95, 'cities': ['New York', 'Los Angeles', 'Chicago']},
-            {'value': 'United Kingdom', 'label': 'Royaume-Uni', 'count': 80, 'cities': ['London', 'Manchester', 'Edinburgh']},
-            {'value': 'Italy', 'label': 'Italie', 'count': 75, 'cities': ['Rome', 'Milan', 'Venice']},
-            {'value': 'Spain', 'label': 'Espagne', 'count': 65, 'cities': ['Barcelona', 'Madrid', 'Seville']},
-        ]
-        return Response(common_countries)
+        return None
+    
+    def _extract_image_from_photos(self, photos):
+        """Extraire l'image principale depuis l'endpoint photos"""
+        if not photos or not isinstance(photos, list) or len(photos) == 0:
+            return None
+            
+        for photo in photos[:3]:  # Essayer les 3 premières photos
+            if not isinstance(photo, dict):
+                continue
+                
+            # Structure avec images multiples
+            if 'images' in photo and isinstance(photo['images'], dict):
+                images = photo['images']
+                # Préférer l'image 'large' ou 'original'
+                for size in ['large', 'original', 'medium', 'small']:
+                    if size in images and isinstance(images[size], dict) and 'url' in images[size]:
+                        image_url = images[size]['url']
+                        if image_url and isinstance(image_url, str):
+                            return image_url
+            
+            # URL directe dans la photo
+            if 'url' in photo and isinstance(photo['url'], str):
+                return photo['url']
+        
+        return None
+    
+    def _map_category_from_details(self, location_details):
+        """Mapper la catégorie depuis les détails TripAdvisor"""
+        if 'category' in location_details:
+            category_name = location_details['category'].get('name', '').lower()
+            if 'restaurant' in category_name:
+                return 'restaurant'
+            elif 'hotel' in category_name:
+                return 'hotel'
+        return 'attraction'
+
+
+# ============= FONCTIONS UTILITAIRES =============
+
+@api_view(['GET'])
+def search_suggestions(request):
+    """
+    API pour obtenir des suggestions de recherche via TripAdvisor API
+    """
+    try:
+        query = request.GET.get('q', '').strip()
+        
+        if not query or len(query) < 2:
+            return JsonResponse({'suggestions': []})
+        
+        # Service TripAdvisor RÉEL
+        service = get_tripadvisor_service()
+        
+        # Recherche de suggestions
+        results = service.search_locations(query)
+        
+        if not results:
+            return JsonResponse({'suggestions': []})
+        
+        # Formater les suggestions
+        suggestions = []
+        for location in results[:10]:  # Limiter à 10 suggestions
+            suggestion = {
+                'name': location.get('name', ''),
+                'location_id': location.get('location_id'),
+                'address': location.get('address_obj', {}).get('address_string', ''),
+                'category': location.get('category', {}).get('name', 'attraction')
+            }
+            suggestions.append(suggestion)
+        
+        return JsonResponse({'suggestions': suggestions})
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des suggestions: {str(e)}")
+        return JsonResponse({'suggestions': []})
+
+
+@api_view(['GET'])
+def categories(request):
+    """
+    API pour obtenir les catégories d'attractions disponibles
+    """
+    categories_list = [
+        {'id': 'attraction', 'name': 'Attractions', 'name_fr': 'Attractions'},
+        {'id': 'restaurant', 'name': 'Restaurants', 'name_fr': 'Restaurants'},
+        {'id': 'hotel', 'name': 'Hotels', 'name_fr': 'Hôtels'},
+        {'id': 'museum', 'name': 'Museums', 'name_fr': 'Musées'},
+        {'id': 'park', 'name': 'Parks', 'name_fr': 'Parcs'},
+        {'id': 'beach', 'name': 'Beaches', 'name_fr': 'Plages'},
+        {'id': 'monument', 'name': 'Monuments', 'name_fr': 'Monuments'},
+        {'id': 'church', 'name': 'Churches', 'name_fr': 'Églises'},
+        {'id': 'theater', 'name': 'Theaters', 'name_fr': 'Théâtres'},
+        {'id': 'zoo', 'name': 'Zoos', 'name_fr': 'Zoos'},
+        {'id': 'aquarium', 'name': 'Aquariums', 'name_fr': 'Aquariums'},
+        {'id': 'gallery', 'name': 'Art Galleries', 'name_fr': 'Galeries d\'art'},
+        {'id': 'garden', 'name': 'Gardens', 'name_fr': 'Jardins'},
+        {'id': 'castle', 'name': 'Castles', 'name_fr': 'Châteaux'},
+        {'id': 'bridge', 'name': 'Bridges', 'name_fr': 'Ponts'},
+        {'id': 'market', 'name': 'Markets', 'name_fr': 'Marchés'},
+        {'id': 'shopping', 'name': 'Shopping', 'name_fr': 'Shopping'},
+        {'id': 'spa', 'name': 'Spas', 'name_fr': 'Spas'},
+        {'id': 'adventure', 'name': 'Adventure Tours', 'name_fr': 'Aventure'},
+        {'id': 'nightlife', 'name': 'Nightlife', 'name_fr': 'Vie nocturne'}
+    ]
+    
+    return JsonResponse({'categories': categories_list})
+
+
+@api_view(['GET'])
+def countries(request):
+    """
+    API pour obtenir la liste des pays disponibles avec couverture mondiale
+    """
+    countries_list = [
+        # Europe
+        {'code': 'FR', 'name': 'France', 'name_fr': 'France', 'continent': 'Europe'},
+        {'code': 'ES', 'name': 'Spain', 'name_fr': 'Espagne', 'continent': 'Europe'},
+        {'code': 'IT', 'name': 'Italy', 'name_fr': 'Italie', 'continent': 'Europe'},
+        {'code': 'GB', 'name': 'United Kingdom', 'name_fr': 'Royaume-Uni', 'continent': 'Europe'},
+        {'code': 'DE', 'name': 'Germany', 'name_fr': 'Allemagne', 'continent': 'Europe'},
+        {'code': 'NL', 'name': 'Netherlands', 'name_fr': 'Pays-Bas', 'continent': 'Europe'},
+        {'code': 'BE', 'name': 'Belgium', 'name_fr': 'Belgique', 'continent': 'Europe'},
+        {'code': 'CH', 'name': 'Switzerland', 'name_fr': 'Suisse', 'continent': 'Europe'},
+        {'code': 'AT', 'name': 'Austria', 'name_fr': 'Autriche', 'continent': 'Europe'},
+        {'code': 'PT', 'name': 'Portugal', 'name_fr': 'Portugal', 'continent': 'Europe'},
+        
+        # Amérique du Nord
+        {'code': 'US', 'name': 'United States', 'name_fr': 'États-Unis', 'continent': 'North America'},
+        {'code': 'CA', 'name': 'Canada', 'name_fr': 'Canada', 'continent': 'North America'},
+        {'code': 'MX', 'name': 'Mexico', 'name_fr': 'Mexique', 'continent': 'North America'},
+        
+        # Amérique du Sud
+        {'code': 'BR', 'name': 'Brazil', 'name_fr': 'Brésil', 'continent': 'South America'},
+        {'code': 'AR', 'name': 'Argentina', 'name_fr': 'Argentine', 'continent': 'South America'},
+        {'code': 'CL', 'name': 'Chile', 'name_fr': 'Chili', 'continent': 'South America'},
+        {'code': 'PE', 'name': 'Peru', 'name_fr': 'Pérou', 'continent': 'South America'},
+        {'code': 'CO', 'name': 'Colombia', 'name_fr': 'Colombie', 'continent': 'South America'},
+        
+        # Asie
+        {'code': 'JP', 'name': 'Japan', 'name_fr': 'Japon', 'continent': 'Asia'},
+        {'code': 'CN', 'name': 'China', 'name_fr': 'Chine', 'continent': 'Asia'},
+        {'code': 'IN', 'name': 'India', 'name_fr': 'Inde', 'continent': 'Asia'},
+        {'code': 'TH', 'name': 'Thailand', 'name_fr': 'Thaïlande', 'continent': 'Asia'},
+        {'code': 'KR', 'name': 'South Korea', 'name_fr': 'Corée du Sud', 'continent': 'Asia'},
+        {'code': 'SG', 'name': 'Singapore', 'name_fr': 'Singapour', 'continent': 'Asia'},
+        {'code': 'MY', 'name': 'Malaysia', 'name_fr': 'Malaisie', 'continent': 'Asia'},
+        {'code': 'ID', 'name': 'Indonesia', 'name_fr': 'Indonésie', 'continent': 'Asia'},
+        {'code': 'PH', 'name': 'Philippines', 'name_fr': 'Philippines', 'continent': 'Asia'},
+        {'code': 'VN', 'name': 'Vietnam', 'name_fr': 'Vietnam', 'continent': 'Asia'},
+        
+        # Afrique
+        {'code': 'ZA', 'name': 'South Africa', 'name_fr': 'Afrique du Sud', 'continent': 'Africa'},
+        {'code': 'EG', 'name': 'Egypt', 'name_fr': 'Égypte', 'continent': 'Africa'},
+        {'code': 'MA', 'name': 'Morocco', 'name_fr': 'Maroc', 'continent': 'Africa'},
+        {'code': 'TN', 'name': 'Tunisia', 'name_fr': 'Tunisie', 'continent': 'Africa'},
+        {'code': 'KE', 'name': 'Kenya', 'name_fr': 'Kenya', 'continent': 'Africa'},
+        {'code': 'TZ', 'name': 'Tanzania', 'name_fr': 'Tanzanie', 'continent': 'Africa'},
+        
+        # Océanie
+        {'code': 'AU', 'name': 'Australia', 'name_fr': 'Australie', 'continent': 'Oceania'},
+        {'code': 'NZ', 'name': 'New Zealand', 'name_fr': 'Nouvelle-Zélande', 'continent': 'Oceania'},
+        {'code': 'FJ', 'name': 'Fiji', 'name_fr': 'Fidji', 'continent': 'Oceania'}
+    ]
+    
+    return JsonResponse({'countries': countries_list})
 
 
 @api_view(['GET'])
 def cuisines(request):
     """
-    API pour obtenir la liste des types de cuisine disponibles
+    API pour obtenir la liste des cuisines disponibles
     """
-    cuisines = [
-        {'value': 'French', 'label': 'Cuisine Française', 'count': 45},
-        {'value': 'Italian', 'label': 'Cuisine Italienne', 'count': 38},
-        {'value': 'Japanese', 'label': 'Cuisine Japonaise', 'count': 32},
-        {'value': 'American', 'label': 'Cuisine Américaine', 'count': 28},
-        {'value': 'Thai', 'label': 'Cuisine Thaïlandaise', 'count': 25},
-        {'value': 'Chinese', 'label': 'Cuisine Chinoise', 'count': 22},
-        {'value': 'Indian', 'label': 'Cuisine Indienne', 'count': 20},
-        {'value': 'Spanish', 'label': 'Cuisine Espagnole', 'count': 18},
-        {'value': 'German', 'label': 'Cuisine Allemande', 'count': 15},
-        {'value': 'Mexican', 'label': 'Cuisine Mexicaine', 'count': 12},
+    cuisines_list = [
+        {'id': 'italian', 'name': 'Italian', 'name_fr': 'Italienne'},
+        {'id': 'french', 'name': 'French', 'name_fr': 'Française'},
+        {'id': 'american', 'name': 'American', 'name_fr': 'Américaine'},
+        {'id': 'chinese', 'name': 'Chinese', 'name_fr': 'Chinoise'},
+        {'id': 'japanese', 'name': 'Japanese', 'name_fr': 'Japonaise'},
+        {'id': 'indian', 'name': 'Indian', 'name_fr': 'Indienne'},
+        {'id': 'mexican', 'name': 'Mexican', 'name_fr': 'Mexicaine'},
+        {'id': 'thai', 'name': 'Thai', 'name_fr': 'Thaïlandaise'},
+        {'id': 'mediterranean', 'name': 'Mediterranean', 'name_fr': 'Méditerranéenne'},
+        {'id': 'seafood', 'name': 'Seafood', 'name_fr': 'Fruits de mer'},
+        {'id': 'vegetarian', 'name': 'Vegetarian', 'name_fr': 'Végétarienne'},
+        {'id': 'vegan', 'name': 'Vegan', 'name_fr': 'Végétalienne'},
+        {'id': 'steakhouse', 'name': 'Steakhouse', 'name_fr': 'Steakhouse'},
+        {'id': 'fast_food', 'name': 'Fast Food', 'name_fr': 'Fast Food'},
+        {'id': 'cafe', 'name': 'Cafe', 'name_fr': 'Café'},
+        {'id': 'bar', 'name': 'Bar', 'name_fr': 'Bar'},
+        {'id': 'pizza', 'name': 'Pizza', 'name_fr': 'Pizza'},
+        {'id': 'sushi', 'name': 'Sushi', 'name_fr': 'Sushi'},
+        {'id': 'barbecue', 'name': 'Barbecue', 'name_fr': 'Barbecue'},
+        {'id': 'latin', 'name': 'Latin American', 'name_fr': 'Latino-américaine'}
     ]
     
-    return Response(cuisines)
+    return JsonResponse({'cuisines': cuisines_list})
 
 
 @api_view(['GET'])
@@ -305,20 +791,25 @@ def hotel_styles(request):
     """
     API pour obtenir la liste des styles d'hôtels disponibles
     """
-    styles = [
-        {'value': 'Luxury', 'label': 'Hôtels de Luxe', 'count': 25},
-        {'value': 'Boutique', 'label': 'Hôtels Boutique', 'count': 20},
-        {'value': 'Business', 'label': 'Hôtels d\'Affaires', 'count': 18},
-        {'value': 'Resort', 'label': 'Complexes Hôteliers', 'count': 15},
-        {'value': 'Budget', 'label': 'Hôtels Économiques', 'count': 12},
-        {'value': 'Historic', 'label': 'Hôtels Historiques', 'count': 10},
-        {'value': 'Modern', 'label': 'Hôtels Modernes', 'count': 8},
-        {'value': 'Family', 'label': 'Hôtels Familiaux', 'count': 7},
-        {'value': 'Eco-friendly', 'label': 'Hôtels Écologiques', 'count': 5},
-        {'value': 'Design', 'label': 'Hôtels Design', 'count': 4},
+    styles_list = [
+        {'id': 'luxury', 'name': 'Luxury', 'name_fr': 'Luxe'},
+        {'id': 'boutique', 'name': 'Boutique', 'name_fr': 'Boutique'},
+        {'id': 'business', 'name': 'Business', 'name_fr': 'Affaires'},
+        {'id': 'family', 'name': 'Family-Friendly', 'name_fr': 'Familial'},
+        {'id': 'romantic', 'name': 'Romantic', 'name_fr': 'Romantique'},
+        {'id': 'spa', 'name': 'Spa & Wellness', 'name_fr': 'Spa et Bien-être'},
+        {'id': 'beach', 'name': 'Beach Resort', 'name_fr': 'Station balnéaire'},
+        {'id': 'city', 'name': 'City Center', 'name_fr': 'Centre-ville'},
+        {'id': 'airport', 'name': 'Airport', 'name_fr': 'Aéroport'},
+        {'id': 'budget', 'name': 'Budget', 'name_fr': 'Économique'},
+        {'id': 'historic', 'name': 'Historic', 'name_fr': 'Historique'},
+        {'id': 'modern', 'name': 'Modern', 'name_fr': 'Moderne'},
+        {'id': 'casino', 'name': 'Casino', 'name_fr': 'Casino'},
+        {'id': 'golf', 'name': 'Golf Resort', 'name_fr': 'Resort de golf'},
+        {'id': 'ski', 'name': 'Ski Resort', 'name_fr': 'Station de ski'}
     ]
     
-    return Response(styles)
+    return JsonResponse({'hotel_styles': styles_list})
 
 
 @api_view(['GET'])
@@ -326,15 +817,69 @@ def attraction_types(request):
     """
     API pour obtenir la liste des types d'attractions disponibles
     """
-    types = [
-        {'value': 'Museums', 'label': 'Musées', 'count': 45},
-        {'value': 'Historical Sites', 'label': 'Sites Historiques', 'count': 40},
-        {'value': 'Outdoor Activities', 'label': 'Activités de Plein Air', 'count': 35},
-        {'value': 'Entertainment', 'label': 'Divertissement', 'count': 30},
-        {'value': 'Cultural', 'label': 'Sites Culturels', 'count': 28},
-        {'value': 'Architecture', 'label': 'Architecture', 'count': 25},
-        {'value': 'Nature', 'label': 'Nature', 'count': 22},
-        {'value': 'Shopping', 'label': 'Shopping', 'count': 20},
+    types_list = [
+        {'id': 'museum', 'name': 'Museums', 'name_fr': 'Musées'},
+        {'id': 'park', 'name': 'Parks & Nature', 'name_fr': 'Parcs et Nature'},
+        {'id': 'monument', 'name': 'Monuments & Landmarks', 'name_fr': 'Monuments et Sites'},
+        {'id': 'church', 'name': 'Churches & Religious Sites', 'name_fr': 'Églises et Sites religieux'},
+        {'id': 'entertainment', 'name': 'Entertainment & Shows', 'name_fr': 'Divertissement et Spectacles'},
+        {'id': 'zoo', 'name': 'Zoos & Aquariums', 'name_fr': 'Zoos et Aquariums'},
+        {'id': 'beach', 'name': 'Beaches', 'name_fr': 'Plages'},
+        {'id': 'shopping', 'name': 'Shopping', 'name_fr': 'Shopping'},
+        {'id': 'nightlife', 'name': 'Nightlife', 'name_fr': 'Vie nocturne'},
+        {'id': 'tours', 'name': 'Tours & Activities', 'name_fr': 'Visites et Activités'},
+        {'id': 'adventure', 'name': 'Adventure & Sports', 'name_fr': 'Aventure et Sports'},
+        {'id': 'cultural', 'name': 'Cultural Sites', 'name_fr': 'Sites culturels'},
+        {'id': 'historic', 'name': 'Historic Sites', 'name_fr': 'Sites historiques'},
+        {'id': 'art', 'name': 'Art Galleries', 'name_fr': 'Galeries d\'art'},
+        {'id': 'theme_park', 'name': 'Theme Parks', 'name_fr': 'Parcs à thème'}
     ]
     
-    return Response(types)
+    return JsonResponse({'attraction_types': types_list})
+
+
+@api_view(['GET'])
+def proxy_image(request):
+    """
+    Proxy pour servir les images TripAdvisor avec headers CORS appropriés
+    """
+    try:
+        image_url = request.GET.get('url')
+        
+        if not image_url:
+            return HttpResponse('URL manquante', status=400)
+        
+        # Vérifier que l'URL est bien de TripAdvisor
+        if 'tripadvisor.com' not in image_url:
+            return HttpResponse('URL non autorisée', status=403)
+        
+        # Headers pour éviter les erreurs CORS et mimétiser un navigateur
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'image/*,*/*;q=0.8',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+            'Referer': 'https://www.tripadvisor.com/'
+        }
+        
+        # Récupérer l'image
+        response = requests.get(image_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            # Créer la réponse avec l'image
+            http_response = HttpResponse(response.content, content_type=response.headers.get('content-type', 'image/jpeg'))
+            
+            # Ajouter les headers CORS
+            http_response['Access-Control-Allow-Origin'] = '*'
+            http_response['Access-Control-Allow-Methods'] = 'GET'
+            http_response['Access-Control-Allow-Headers'] = 'Content-Type'
+            
+            # Headers de cache
+            http_response['Cache-Control'] = 'public, max-age=3600'
+            
+            return http_response
+        else:
+            return HttpResponse(f'Erreur lors de la récupération de l\'image: {response.status_code}', status=response.status_code)
+    
+    except Exception as e:
+        logger.error(f"Erreur proxy image: {str(e)}")
+        return HttpResponse(f'Erreur serveur: {str(e)}', status=500)
