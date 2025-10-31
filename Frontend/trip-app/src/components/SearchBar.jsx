@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Filter } from 'lucide-react';
+import { Search, MapPin, Filter, Sliders } from 'lucide-react';
 
 const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -7,6 +7,15 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [useLocation, setUseLocation] = useState(false);
+  
+  // Filtres avancés
+  const [radius, setRadius] = useState(5);
+  const [minRating, setMinRating] = useState('');
+  const [minReviews, setMinReviews] = useState('');
+  const [minPhotos, setMinPhotos] = useState('');
+  const [priceLevel, setPriceLevel] = useState('');
+  const [openingPeriod, setOpeningPeriod] = useState('');
+  const [ordering, setOrdering] = useState('-rating');
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -20,8 +29,14 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
             onLocationSearch({
               latitude,
               longitude,
-              radius: 5, // 5km par défaut
-              query: searchTerm
+              radius,
+              query: searchTerm,
+              category: selectedCategory,
+              min_rating: minRating,
+              min_reviews: minReviews,
+              min_photos: minPhotos,
+              price_level: priceLevel,
+              ordering: ordering
             });
           },
           (error) => {
@@ -43,7 +58,13 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
     onSearch({
       query: searchTerm,
       country: selectedCountry,
-      category: selectedCategory
+      category: selectedCategory,
+      min_rating: minRating,
+      min_reviews: minReviews,
+      min_photos: minPhotos,
+      price_level: priceLevel,
+      opening_period: openingPeriod,
+      ordering: ordering
     });
   };
 
@@ -52,7 +73,16 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
     setSelectedCountry('');
     setSelectedCategory('');
     setUseLocation(false);
+    setRadius(5);
+    setMinRating('');
+    setMinReviews('');
+    setMinPhotos('');
+    setPriceLevel('');
+    setOpeningPeriod('');
+    setOrdering('-rating');
   };
+
+  const hasAdvancedFilters = minRating || minReviews || minPhotos || priceLevel || openingPeriod || ordering !== '-rating' || (useLocation && radius !== 5);
 
   return (
     <div className="search-container mb-4">
@@ -67,11 +97,12 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
           />
           <button 
             type="button"
-            className="btn btn-outline-secondary"
+            className={`btn ${showFilters ? 'btn-primary' : 'btn-outline-secondary'}`}
             onClick={() => setShowFilters(!showFilters)}
-            title="Filtres"
+            title="Filtres avancés"
           >
             <Filter size={20} />
+            {hasAdvancedFilters && <span className="badge bg-warning text-dark ms-1">!</span>}
           </button>
           <button
             type="button"
@@ -97,12 +128,17 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
         </div>
       </form>
 
-      {/* Filtres avancés */}
+      {/* Filtres de base */}
       {showFilters && (
         <div className="card mb-3">
           <div className="card-body">
-            <h6 className="card-title">Filtres de recherche</h6>
-            <div className="row g-3">
+            <h6 className="card-title d-flex align-items-center">
+              <Sliders size={18} className="me-2" />
+              Filtres de recherche
+            </h6>
+            
+            {/* Filtres de base */}
+            <div className="row g-3 mb-3">
               <div className="col-md-6">
                 <label className="form-label">Pays</label>
                 <select
@@ -134,23 +170,160 @@ const SearchBar = ({ onSearch, onLocationSearch, countries, categories, loading 
                 </select>
               </div>
             </div>
-            
+
+            {/* Rayon de recherche (si géolocalisation activée) */}
             {useLocation && (
-              <div className="mt-3">
-                <div className="alert alert-info d-flex align-items-center">
-                  <MapPin size={16} className="me-2" />
-                  Recherche géolocalisée activée - nous utiliserons votre position actuelle
+              <div className="mb-3">
+                <label className="form-label">Rayon de recherche: {radius} km</label>
+                <input
+                  type="range"
+                  className="form-range"
+                  min="1"
+                  max="50"
+                  value={radius}
+                  onChange={(e) => setRadius(parseInt(e.target.value))}
+                />
+                <div className="d-flex justify-content-between small text-muted">
+                  <span>1 km</span>
+                  <span>50 km</span>
                 </div>
               </div>
             )}
 
-            <div className="mt-3">
+            {/* Filtres avancés */}
+            <hr />
+            <h6 className="mb-3">Filtres avancés</h6>
+            
+            <div className="row g-3 mb-3">
+              <div className="col-md-4">
+                <label className="form-label">Note minimum</label>
+                <select
+                  className="form-select"
+                  value={minRating}
+                  onChange={(e) => setMinRating(e.target.value)}
+                >
+                  <option value="">Toutes les notes</option>
+                  <option value="1">⭐ 1+ étoile</option>
+                  <option value="2">⭐ 2+ étoiles</option>
+                  <option value="3">⭐ 3+ étoiles</option>
+                  <option value="4">⭐ 4+ étoiles</option>
+                  <option value="4.5">⭐ 4.5+ étoiles</option>
+                </select>
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Reviews minimum</label>
+                <select
+                  className="form-select"
+                  value={minReviews}
+                  onChange={(e) => setMinReviews(e.target.value)}
+                >
+                  <option value="">Tous les nombres</option>
+                  <option value="10">10+ avis</option>
+                  <option value="50">50+ avis</option>
+                  <option value="100">100+ avis</option>
+                  <option value="500">500+ avis</option>
+                  <option value="1000">1000+ avis</option>
+                </select>
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Photos minimum</label>
+                <select
+                  className="form-select"
+                  value={minPhotos}
+                  onChange={(e) => setMinPhotos(e.target.value)}
+                >
+                  <option value="">Tous les nombres</option>
+                  <option value="1">1+ photo</option>
+                  <option value="3">3+ photos</option>
+                  <option value="5">5+ photos</option>
+                  <option value="10">10+ photos</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="row g-3 mb-3">
+              <div className="col-md-6">
+                <label className="form-label">Niveau de prix</label>
+                <select
+                  className="form-select"
+                  value={priceLevel}
+                  onChange={(e) => setPriceLevel(e.target.value)}
+                >
+                  <option value="">Tous les prix</option>
+                  <option value="1">€ Économique</option>
+                  <option value="2">€€ Modéré</option>
+                  <option value="3">€€€ Cher</option>
+                  <option value="4">€€€€ Très cher</option>
+                </select>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Période d'ouverture</label>
+                <select
+                  className="form-select"
+                  value={openingPeriod}
+                  onChange={(e) => setOpeningPeriod(e.target.value)}
+                >
+                  <option value="">Toutes les périodes</option>
+                  <option value="open_now">Ouvert maintenant</option>
+                  <option value="weekdays">En semaine</option>
+                  <option value="weekends">Week-ends</option>
+                  <option value="holidays">Jours fériés</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="row g-3 mb-3">
+              <div className="col-md-12">
+                <label className="form-label">Trier par</label>
+                <select
+                  className="form-select"
+                  value={ordering}
+                  onChange={(e) => setOrdering(e.target.value)}
+                >
+                  <option value="-rating">⭐ Meilleures notes d'abord</option>
+                  <option value="rating">⭐ Notes les plus basses d'abord</option>
+                  <option value="-num_reviews">💬 Plus d'avis d'abord</option>
+                  <option value="num_reviews">💬 Moins d'avis d'abord</option>
+                  <option value="ranking">🏆 Meilleur classement</option>
+                  <option value="-ranking">🏆 Moins bien classées</option>
+                  <option value="name">🔤 Nom A-Z</option>
+                  <option value="-name">🔤 Nom Z-A</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* État géolocalisation */}
+            {useLocation && (
+              <div className="alert alert-info d-flex align-items-center">
+                <MapPin size={16} className="me-2" />
+                Recherche géolocalisée activée - Rayon: {radius} km autour de votre position
+              </div>
+            )}
+
+            {/* Indicateur de filtres actifs */}
+            {hasAdvancedFilters && (
+              <div className="alert alert-warning d-flex align-items-center">
+                <Filter size={16} className="me-2" />
+                Des filtres avancés sont actifs
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="d-flex gap-2">
               <button 
                 type="button" 
                 className="btn btn-outline-secondary btn-sm"
                 onClick={resetFilters}
               >
-                Réinitialiser les filtres
+                Réinitialiser tous les filtres
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-primary btn-sm"
+                disabled={loading}
+                onClick={handleSearch}
+              >
+                Appliquer les filtres
               </button>
             </div>
           </div>

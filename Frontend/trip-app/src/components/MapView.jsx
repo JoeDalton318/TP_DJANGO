@@ -41,8 +41,8 @@ const MapController = ({ center, zoom, attractions }) => {
     } else if (attractions && attractions.length > 0) {
       // Calculer les limites pour afficher toutes les attractions
       const validLocations = attractions
-        .filter(attr => attr.location && attr.location.length === 2)
-        .map(attr => attr.location);
+        .filter(attr => attr.latitude && attr.longitude)
+        .map(attr => [attr.latitude, attr.longitude]);
       
       if (validLocations.length > 0) {
         const bounds = L.latLngBounds(validLocations);
@@ -66,11 +66,10 @@ const MapView = ({
 
   // Filtrer les attractions qui ont des coordonnées valides
   const validAttractions = attractions.filter(
-    attraction => attraction.location && 
-                 Array.isArray(attraction.location) && 
-                 attraction.location.length === 2 &&
-                 !isNaN(attraction.location[0]) && 
-                 !isNaN(attraction.location[1])
+    attraction => attraction.latitude && 
+                 attraction.longitude && 
+                 !isNaN(attraction.latitude) && 
+                 !isNaN(attraction.longitude)
   );
 
   return (
@@ -115,7 +114,7 @@ const MapView = ({
         {validAttractions.map((attraction, index) => (
           <Marker
             key={attraction.id || index}
-            position={[attraction.location[0], attraction.location[1]]}
+            position={[attraction.latitude, attraction.longitude]}
             icon={attractionIcon}
             eventHandlers={{
               click: () => {

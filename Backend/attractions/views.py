@@ -71,19 +71,23 @@ class AttractionSearchView(APIView):
     
     def get(self, request):
         try:
-            # Récupérer les paramètres de recherche
+            # Récupérer les paramètres de recherche de base
             query = request.query_params.get('query', '').strip()
             city = request.query_params.get('city', '').strip()
             country = request.query_params.get('country', '').strip()
             category = request.query_params.get('category', '').strip()
+            
+            # Récupérer les filtres avancés
             min_rating = request.query_params.get('min_rating')
             max_rating = request.query_params.get('max_rating')
             min_reviews = request.query_params.get('min_reviews')
+            min_photos = request.query_params.get('min_photos')
             price_level = request.query_params.get('price_level', '').strip()
+            opening_period = request.query_params.get('opening_period', '').strip()
             ordering = request.query_params.get('ordering', '-rating').strip()
             limit = min(int(request.query_params.get('limit', 20)), 50)
             
-            logger.info(f"🔍 AttractionSearchView - Paramètres reçus: query='{query}', city='{city}', country='{country}'")
+            logger.info(f"🔍 AttractionSearchView - Paramètres reçus: query='{query}', country='{country}', filtres avancés actifs")
             
             # Construire la requête de recherche
             search_terms = []
@@ -96,9 +100,9 @@ class AttractionSearchView(APIView):
             
             search_query = ' '.join(search_terms) if search_terms else 'attractions'
             
-            logger.info(f"🔍 Recherche: '{search_query}' avec filtres: category={category}, min_rating={min_rating}")
+            logger.info(f"🔍 Recherche: '{search_query}' avec filtres avancés")
             
-            # Préparer les filtres
+            # Préparer TOUS les filtres
             filters = {}
             if city:
                 filters['city'] = city
@@ -108,6 +112,18 @@ class AttractionSearchView(APIView):
                 filters['category'] = category
             if min_rating:
                 filters['min_rating'] = min_rating
+            if max_rating:
+                filters['max_rating'] = max_rating
+            if min_reviews:
+                filters['min_reviews'] = min_reviews
+            if min_photos:
+                filters['min_photos'] = min_photos
+            if price_level:
+                filters['price_level'] = price_level
+            if opening_period:
+                filters['opening_period'] = opening_period
+            if ordering:
+                filters['ordering'] = ordering
             if max_rating:
                 filters['max_rating'] = max_rating
             if min_reviews:
@@ -465,18 +481,40 @@ class AttractionNearbyView(APIView):
                     'detail': 'Les paramètres latitude et longitude sont obligatoires'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Paramètres optionnels
+            # Paramètres optionnels de base
             radius = request.query_params.get('radius', '5')  # 5km par défaut
             category = request.query_params.get('category', '')
             limit = min(int(request.query_params.get('limit', 10)), 20)
             
-            logger.info(f"🧭 Recherche proximité: lat={latitude}, lon={longitude}, radius={radius}")
+            # Paramètres de filtres avancés
+            min_rating = request.query_params.get('min_rating')
+            max_rating = request.query_params.get('max_rating')
+            min_reviews = request.query_params.get('min_reviews')
+            min_photos = request.query_params.get('min_photos')
+            price_level = request.query_params.get('price_level')
+            
+            logger.info(f"🧭 Recherche proximité avec filtres: lat={latitude}, lon={longitude}, radius={radius}")
             
             # Construire latLong pour TripAdvisor API
             lat_long = f"{latitude},{longitude}"
             
-            # Utiliser le service TripAdvisor nearby search
-            attractions = tripadvisor_service.nearby_search(lat_long, radius=radius, category=category)
+            # Préparer les filtres pour nearby search
+            filters = {}
+            if category:
+                filters['category'] = category
+            if min_rating:
+                filters['min_rating'] = min_rating
+            if max_rating:
+                filters['max_rating'] = max_rating
+            if min_reviews:
+                filters['min_reviews'] = min_reviews
+            if min_photos:
+                filters['min_photos'] = min_photos
+            if price_level:
+                filters['price_level'] = price_level
+            
+            # Utiliser le service TripAdvisor nearby search avec filtres
+            attractions = tripadvisor_service.nearby_search(lat_long, radius=radius, **filters)
             
             # Limiter les résultats
             limited_attractions = attractions[:limit]

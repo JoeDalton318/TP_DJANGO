@@ -11,7 +11,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     rating,
     num_reviews,
     main_image,
-    images,
+    num_photos,
     category,
     price_level,
     distance,
@@ -67,7 +67,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
   };
 
   // Image par défaut si pas d'image disponible
-  const imageUrl = main_image || (images && images.length > 0 ? images[0].url : null);
+  const imageUrl = main_image;
   const defaultImage = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjlmYSIvPjx0ZXh0IHg9IjIwMCIgeT0iMTAwIiBmb250LXNpemU9IjE4IiBmaWxsPSIjNmM3NTdkIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+UGFzIGQnaW1hZ2UgZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=";
 
   return (
@@ -137,10 +137,10 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
           {/* Actions */}
           <div className="mt-auto pt-2">
             <div className="d-flex justify-content-between align-items-center">
-              {images && images.length > 1 && (
+              {num_photos && num_photos > 1 && (
                 <small className="text-muted d-flex align-items-center">
                   <Camera size={14} className="me-1" />
-                  {images.length} photos
+                  {num_photos} photos
                 </small>
               )}
               

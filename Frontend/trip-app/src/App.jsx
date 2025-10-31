@@ -30,32 +30,60 @@ function App() {
   const [selectedAttraction, setSelectedAttraction] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  // Chargement initial
+  // Chargement initial avec attractions populaires par région
   useEffect(() => {
-    loadInitialData();
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Charger les données de configuration en parallèle
+        const [countriesData, categoriesData] = await Promise.all([
+          attractionsAPI.getCountries(),
+          attractionsAPI.getCategories()
+        ]);
+        
+        setCountries(countriesData.countries || []);
+        setCategories(categoriesData.categories || []);
+        
+        // Essayer de détecter la région par géolocalisation ou utiliser France par défaut
+        await loadPopularAttractionsByRegion();
+        
+      } catch (err) {
+        console.error('Erreur chargement initial:', err);
+        setError('Erreur lors du chargement des données. Vérifiez que le serveur Django est démarré.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
   }, []);
 
-  const loadInitialData = async () => {
+
+
+  const loadPopularAttractionsByRegion = async (defaultCountry = 'France') => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Charger les données initiales en parallèle
-      const [attractionsData, countriesData, categoriesData] = await Promise.all([
-        attractionsAPI.getPopularAttractions({ limit: 12 }),
-        attractionsAPI.getCountries(),
-        attractionsAPI.getCategories()
-      ]);
+      // Charger les attractions populaires par défaut (France ou pays détecté)
+      const attractionsData = await attractionsAPI.getPopularAttractions({ 
+        country: defaultCountry, 
+        limit: 12 
+      });
       
       setAttractions(attractionsData.data || []);
-      setCountries(countriesData.countries || []);
-      setCategories(categoriesData.categories || []);
+      setLastSearch({ type: 'popular', country: defaultCountry });
       
     } catch (err) {
-      console.error('Erreur chargement initial:', err);
-      setError('Erreur lors du chargement des données. Vérifiez que le serveur Django est démarré.');
-    } finally {
-      setLoading(false);
+      console.error('Erreur chargement attractions par région:', err);
+      // Fallback: charger sans filtre pays
+      try {
+        const fallbackData = await attractionsAPI.getPopularAttractions({ limit: 12 });
+        setAttractions(fallbackData.data || []);
+        setLastSearch({ type: 'popular', country: 'global' });
+      } catch (fallbackErr) {
+        console.error('Erreur fallback:', fallbackErr);
+        setError('Impossible de charger les attractions populaires');
+      }
     }
   };
 
@@ -67,17 +95,28 @@ function App() {
       setIsLocationSearch(false);
       setUserLocation(null);
       
-      console.log('� Recherche textuelle:', searchParams);
+      console.log('🔍 Recherche textuelle avec filtres:', searchParams);
       
-      const results = await attractionsAPI.searchAttractions({
+      // Construire les paramètres de recherche avec tous les filtres
+      const searchRequest = {
         query: searchParams.query,
         country: searchParams.country,
         category: searchParams.category,
         limit: 20
-      });
+      };
+
+      // Ajouter les filtres avancés s'ils sont présents
+      if (searchParams.min_rating) searchRequest.min_rating = searchParams.min_rating;
+      if (searchParams.min_reviews) searchRequest.min_reviews = searchParams.min_reviews;
+      if (searchParams.min_photos) searchRequest.min_photos = searchParams.min_photos;
+      if (searchParams.price_level) searchRequest.price_level = searchParams.price_level;
+      if (searchParams.opening_period) searchRequest.opening_period = searchParams.opening_period;
+      if (searchParams.ordering) searchRequest.ordering = searchParams.ordering;
+      
+      const results = await attractionsAPI.searchAttractions(searchRequest);
       
       setAttractions(results.data || []);
-      setLastSearch(searchParams);
+      setLastSearch({ ...searchParams, type: 'search' });
       
     } catch (err) {
       console.error('Erreur recherche:', err);
@@ -94,7 +133,7 @@ function App() {
       setError(null);
       setIsLocationSearch(true);
       
-      console.log('🧭 Recherche géolocalisée:', locationParams);
+      console.log('🧭 Recherche géolocalisée avec filtres:', locationParams);
       
       // Sauvegarder la position de l'utilisateur
       setUserLocation({
@@ -102,15 +141,26 @@ function App() {
         longitude: locationParams.longitude
       });
       
-      const results = await attractionsAPI.getNearbyAttractions({
+      // Construire les paramètres de recherche géolocalisée
+      const locationRequest = {
         latitude: locationParams.latitude,
         longitude: locationParams.longitude,
         radius: locationParams.radius || 5,
         limit: 20
-      });
+      };
+
+      // Ajouter les filtres avancés s'ils sont présents
+      if (locationParams.category) locationRequest.category = locationParams.category;
+      if (locationParams.min_rating) locationRequest.min_rating = locationParams.min_rating;
+      if (locationParams.min_reviews) locationRequest.min_reviews = locationParams.min_reviews;
+      if (locationParams.min_photos) locationRequest.min_photos = locationParams.min_photos;
+      if (locationParams.price_level) locationRequest.price_level = locationParams.price_level;
+      if (locationParams.ordering) locationRequest.ordering = locationParams.ordering;
+      
+      const results = await attractionsAPI.getNearbyAttractions(locationRequest);
       
       setAttractions(results.data || []);
-      setLastSearch(locationParams);
+      setLastSearch({ ...locationParams, type: 'location' });
       
     } catch (err) {
       console.error('Erreur recherche géolocalisée:', err);
@@ -137,16 +187,30 @@ function App() {
     handleViewDetails(attraction);
   };
 
-  // Titre dynamique
+  // Titre dynamique basé sur le type de recherche
   const getPageTitle = () => {
-    if (isLocationSearch) {
-      return `🧭 Attractions près de vous`;
-    } else if (lastSearch?.query) {
-      return `🔍 Résultats pour "${lastSearch.query}"`;
-    } else if (lastSearch?.country) {
-      return `🌍 Attractions en ${lastSearch.country}`;
-    } else {
+    if (!lastSearch) {
       return '🌟 Attractions Populaires';
+    }
+
+    switch (lastSearch.type) {
+      case 'location':
+        return `🧭 Attractions près de vous (${lastSearch.radius || 5} km)`;
+      case 'search':
+        if (lastSearch.query && lastSearch.country) {
+          return `🔍 "${lastSearch.query}" en ${lastSearch.country}`;
+        } else if (lastSearch.query) {
+          return `🔍 Résultats pour "${lastSearch.query}"`;
+        } else if (lastSearch.country) {
+          return `🌍 Attractions en ${lastSearch.country}`;
+        }
+        return '🔍 Résultats de recherche';
+      case 'popular':
+        return lastSearch.country !== 'global' 
+          ? `🌟 Attractions Populaires - ${lastSearch.country}`
+          : '🌟 Attractions Populaires Mondiales';
+      default:
+        return '🌟 Découvrez des Attractions';
     }
   };
 

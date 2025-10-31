@@ -1,5 +1,6 @@
 import requests
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from django.conf import settings
 from django.core.cache import cache
@@ -13,13 +14,20 @@ class TripAdvisorService:
     """
     
     def __init__(self):
-        # Clé API fournie par l'utilisateur
-        self.api_key = "EB3C18394FB747BCA1801E5AAB48A962"
+        # Clé API depuis les variables d'environnement ou settings Django
+        self.api_key = getattr(settings, 'TRIPADVISOR_API_KEY', None) or os.getenv('TRIPADVISOR_API_KEY')
+        
+        if not self.api_key:
+            raise ValueError(
+                "Clé API TripAdvisor manquante. "
+                "Définissez TRIPADVISOR_API_KEY dans vos variables d'environnement ou dans settings.py"
+            )
+        
         self.base_url = "https://api.content.tripadvisor.com/api/v1"
         self.headers = {
             'accept': 'application/json'
         }
-        logger.info("TripAdvisor Service initialized with API key")
+        logger.info("TripAdvisor Service initialized with API key from environment")
     
     def _make_request(self, endpoint: str, params: Dict = None) -> Optional[Dict]:
         """
@@ -76,12 +84,12 @@ class TripAdvisorService:
         logger.warning(f"No results found for query: {search_query}")
         return []
     
-    def nearby_search(self, lat_long: str, language: str = "fr", radius: str = None, category: str = None) -> List[Dict[str, Any]]:
+    def nearby_search(self, lat_long: str, language: str = "fr", radius: str = None, category: str = None, **filters) -> List[Dict[str, Any]]:
         """
-        Recherche de lieux à proximité avec coordonnées GPS
+        Recherche de lieux à proximité avec coordonnées GPS et filtres avancés
         Format: GET /location/nearby_search?latLong=42.3455%2C-71.10767&language=en&key=API_KEY
         """
-        cache_key = f"tripadvisor_nearby_{lat_long}_{language}_{radius}_{category}"
+        cache_key = f"tripadvisor_nearby_{lat_long}_{language}_{radius}_{category}_{hash(str(sorted(filters.items())))}"
         cached_result = cache.get(cache_key)
         if cached_result:
             logger.info(f"Returning cached nearby search result for: {lat_long}")
@@ -100,11 +108,37 @@ class TripAdvisorService:
         data = self._make_request('location/nearby_search', params)
         
         if data and 'data' in data:
-            result = data['data']
+            locations = data['data']
+            logger.info(f"Found {len(locations)} nearby locations for: {lat_long}")
+            
+            # Enrichir et appliquer les filtres comme pour search_attractions_by_query
+            enriched_attractions = []
+            for location in locations[:20]:  # Limiter pour éviter trop d'appels API
+                location_id = location.get('location_id')
+                if not location_id:
+                    continue
+                
+                # Récupérer détails et photos
+                details = self.get_location_details(location_id, language="fr")
+                photos = self.get_location_photos(location_id)
+                
+                # Formater l'attraction
+                attraction = self._format_attraction(location, details, photos)
+                if attraction:
+                    # Ajouter les informations de proximité
+                    if 'distance' in location:
+                        attraction['distance'] = location.get('distance')
+                        attraction['bearing'] = location.get('bearing')
+                    
+                    enriched_attractions.append(attraction)
+            
+            # Appliquer les filtres avancés
+            filtered_attractions = self._apply_filters(enriched_attractions, filters)
+            
             # Cache pour 30 minutes (données de proximité peuvent changer plus souvent)
-            cache.set(cache_key, result, 1800)
-            logger.info(f"Found {len(result)} nearby locations for: {lat_long}")
-            return result
+            cache.set(cache_key, filtered_attractions, 1800)
+            logger.info(f"Returning {len(filtered_attractions)} filtered nearby attractions")
+            return filtered_attractions
         
         logger.warning(f"No nearby results found for: {lat_long}")
         return []
@@ -417,7 +451,7 @@ class TripAdvisorService:
     
     def _apply_filters(self, attractions: List[Dict], filters: Dict) -> List[Dict]:
         """
-        Appliquer les filtres aux attractions
+        Appliquer tous les filtres aux attractions
         """
         filtered = attractions[:]
         
@@ -447,6 +481,40 @@ class TripAdvisorService:
                 max_rating = float(filters['max_rating'])
                 filtered = [a for a in filtered if a['rating'] and a['rating'] <= max_rating]
             except (ValueError, TypeError):
+                pass
+        
+        # Filtre par nombre minimum d'avis
+        if filters.get('min_reviews'):
+            try:
+                min_reviews = int(filters['min_reviews'])
+                filtered = [a for a in filtered if a['num_reviews'] and a['num_reviews'] >= min_reviews]
+            except (ValueError, TypeError):
+                pass
+        
+        # Filtre par nombre minimum de photos
+        if filters.get('min_photos'):
+            try:
+                min_photos = int(filters['min_photos'])
+                filtered = [a for a in filtered if a.get('num_photos', 0) >= min_photos]
+            except (ValueError, TypeError):
+                pass
+        
+        # Filtre par niveau de prix
+        if filters.get('price_level'):
+            try:
+                price_level = int(filters['price_level'])
+                filtered = [a for a in filtered if a.get('price_level') == price_level]
+            except (ValueError, TypeError):
+                pass
+        
+        # Filtre par période d'ouverture (simulation pour l'exemple)
+        if filters.get('opening_period'):
+            period = filters['opening_period']
+            if period == 'open_now':
+                # Simulation: considérer comme ouvert si a des horaires
+                filtered = [a for a in filtered if a.get('hours')]
+            elif period in ['weekdays', 'weekends', 'holidays']:
+                # Garder tous pour simulation (nécessiterait API temps réel)
                 pass
         
         # Filtre par nombre minimum d'avis
