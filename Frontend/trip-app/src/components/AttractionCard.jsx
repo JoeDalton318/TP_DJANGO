@@ -1,8 +1,12 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Star, MapPin, Users, Camera, ExternalLink, Award, Heart, Calendar } from 'lucide-react';
 
 const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => {
+  const navigate = useNavigate();
+  
   const {
+    id,
     name,
     description,
     city,
@@ -20,6 +24,15 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
     trip_types,
     ranking
   } = attraction;
+
+  const handleViewDetails = () => {
+    if (onViewDetails) {
+      onViewDetails(attraction);
+    } else {
+      // Si pas de fonction onViewDetails, naviguer vers la page de détail
+      navigate(`/attraction/${id}`);
+    }
+  };
 
   // Fonction pour afficher les étoiles
   const renderStars = (rating) => {
@@ -128,7 +141,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
   };
 
   // Image par défaut si pas d'image disponible
-  const imageUrl = main_image;
+  const imageUrl = main_image || null;
   const defaultImage = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZjlmYSIvPjx0ZXh0IHg9IjIwMCIgeT0iMTAwIiBmb250LXNpemU9IjE4IiBmaWxsPSIjNmM3NTdkIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+UGFzIGQnaW1hZ2UgZGlzcG9uaWJsZTwvdGV4dD48L3N2Zz4=";
 
   return (
@@ -228,7 +241,7 @@ const AttractionCard = ({ attraction, onViewDetails, showDistance = false }) => 
             
             <button
               className="btn btn-primary btn-sm w-100"
-              onClick={() => onViewDetails(attraction)}
+              onClick={handleViewDetails}
             >
               <ExternalLink size={16} className="me-1" />
               Voir détails

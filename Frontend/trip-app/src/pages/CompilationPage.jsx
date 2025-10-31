@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Row, Col, Card, Button, Alert, Form, Badge } from 'react-bootstrap';
-import { Trash2, DollarSign, Navigation } from 'lucide-react';
+import { Container, Row, Col, Card, Button, Alert, Form, Badge, Nav } from 'react-bootstrap';
+import { Trash2, DollarSign, Navigation, Map } from 'lucide-react';
 import { compilationAPI } from '../services/api';
 import AttractionCard from '../components/AttractionCard';
+import CompilationMap from '../components/CompilationMap';
+import Pagination from '../components/Pagination';
 
 export default function CompilationPage() {
   const [data, setData] = useState({ 
@@ -15,6 +17,7 @@ export default function CompilationPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState('list'); // 'list' ou 'map'
 
   const load = useCallback(async (orderOption = '', page = 1) => {
     try {
@@ -96,15 +99,43 @@ export default function CompilationPage() {
       {/* Filtres de tri */}
       <Card className="mb-4">
         <Card.Body>
-          <Form.Group>
-            <Form.Label>Trier par</Form.Label>
-            <Form.Select value={ordering} onChange={(e) => setOrdering(e.target.value)}>
-              <option value="">Par défaut</option>
-              <option value="budget_asc">Budget (croissant)</option>
-              <option value="budget_desc">Budget (décroissant)</option>
-              <option value="distance">Distance (itinéraire optimisé)</option>
-            </Form.Select>
-          </Form.Group>
+          <Row className="align-items-center">
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Trier par</Form.Label>
+                <Form.Select value={ordering} onChange={(e) => setOrdering(e.target.value)}>
+                  <option value="">Par défaut</option>
+                  <option value="budget_asc">Budget (croissant)</option>
+                  <option value="budget_desc">Budget (décroissant)</option>
+                  <option value="distance">Distance (itinéraire optimisé)</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Label>Mode d'affichage</Form.Label>
+              <Nav variant="pills" className="d-flex">
+                <Nav.Item className="flex-fill">
+                  <Nav.Link 
+                    active={viewMode === 'list'} 
+                    onClick={() => setViewMode('list')}
+                    className="text-center"
+                  >
+                    📋 Liste
+                  </Nav.Link>
+                </Nav.Item>
+                <Nav.Item className="flex-fill">
+                  <Nav.Link 
+                    active={viewMode === 'map'} 
+                    onClick={() => setViewMode('map')}
+                    className="text-center"
+                  >
+                    <Map size={16} className="me-1" />
+                    Carte
+                  </Nav.Link>
+                </Nav.Item>
+              </Nav>
+            </Col>
+          </Row>
         </Card.Body>
       </Card>
 
@@ -116,45 +147,45 @@ export default function CompilationPage() {
             </Alert>
           ) : (
             <>
-              <Row xs={1} md={2} lg={3} className="g-4 mb-4">
-                {(data.attractions || []).map((attraction) => (
-                  <Col key={attraction.id}>
-                    <div className="position-relative">
-                      <AttractionCard attraction={attraction} />
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        className="position-absolute top-0 end-0 m-2"
-                        onClick={() => handleRemove(attraction.id)}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  </Col>
-                ))}
-              </Row>
+              {viewMode === 'list' ? (
+                <>
+                  <Row xs={1} sm={2} md={2} lg={3} className="g-3 g-md-4 mb-4">
+                    {(data.attractions || []).map((attraction) => (
+                      <Col key={attraction.id}>
+                        <div className="position-relative h-100">
+                          <AttractionCard attraction={attraction} />
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            className="position-absolute top-0 end-0 m-2"
+                            onClick={() => handleRemove(attraction.id)}
+                            style={{ zIndex: 10 }}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      </Col>
+                    ))}
+                  </Row>
+                </>
+              ) : (
+                <Card className="mb-4">
+                  <Card.Header>
+                    <h5 className="mb-0">🗺️ Carte de votre itinéraire</h5>
+                  </Card.Header>
+                  <Card.Body>
+                    <CompilationMap attractions={data.attractions || []} />
+                  </Card.Body>
+                </Card>
+              )}
 
               {/* Pagination */}
               {data.pagination?.total_pages > 1 && (
-                <div className="d-flex justify-content-center gap-2">
-                  <Button
-                    variant="outline-primary"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                  >
-                    Précédent
-                  </Button>
-                  <span className="align-self-center">
-                    Page {currentPage} sur {data.pagination.total_pages}
-                  </span>
-                  <Button
-                    variant="outline-primary"
-                    disabled={currentPage >= data.pagination.total_pages}
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                  >
-                    Suivant
-                  </Button>
-                </div>
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={data.pagination.total_pages}
+                  onPageChange={(page) => setCurrentPage(page)}
+                />
               )}
             </>
           )}

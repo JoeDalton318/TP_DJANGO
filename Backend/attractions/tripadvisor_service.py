@@ -194,6 +194,33 @@ class TripAdvisorService:
         
         return []
     
+    def get_location_reviews(self, location_id: str, language: str = "en") -> Dict[str, Any]:
+        """
+        Récupérer les reviews d'un lieu selon la documentation officielle
+        Format: GET /location/{location_id}/reviews?language=en&key=API_KEY
+        """
+        cache_key = f"tripadvisor_reviews_{location_id}_{language}"
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return cached_result
+        
+        params = {
+            'language': language
+        }
+        
+        data = self._make_request(f'location/{location_id}/reviews', params)
+        
+        if data and 'data' in data:
+            result = {
+                'reviews': data['data'],
+                'total_reviews': len(data['data'])
+            }
+            # Cache pour 6 heures
+            cache.set(cache_key, result, 21600)
+            return result
+        
+        return {'reviews': [], 'total_reviews': 0}
+    
     def search_attractions_by_query(self, query: str, **filters) -> List[Dict[str, Any]]:
         """
         Recherche d'attractions avec enrichissement des données
@@ -257,13 +284,52 @@ class TripAdvisorService:
         logger.info(f"✅ {len(filtered_attractions)} attractions après filtrage")
         return filtered_attractions
     
-    def get_popular_attractions(self, country: str = "France", limit: int = 20) -> List[Dict[str, Any]]:
+    def get_popular_attractions(self, country: str = "France", limit: int = 50) -> List[Dict[str, Any]]:
         """
         Récupérer les attractions populaires d'un pays
+        IMPORTANT: L'API TripAdvisor limite à ~10 résultats par recherche
+        Solution: Faire plusieurs recherches pour différentes villes
         """
-        # Rechercher les attractions populaires du pays
-        query = f"top attractions {country}"
-        return self.search_attractions_by_query(query)[:limit]
+        # Définir plusieurs recherches par pays pour contourner la limite de 10
+        cities_by_country = {
+            'France': ['Paris France', 'Lyon France', 'Marseille France', 'Nice France'],
+            'Italie': ['Rome Italy', 'Milan Italy', 'Florence Italy', 'Venice Italy'],
+            'Italy': ['Rome Italy', 'Milan Italy', 'Florence Italy', 'Venice Italy'],
+            'Espagne': ['Madrid Spain', 'Barcelona Spain', 'Seville Spain', 'Valencia Spain'],
+            'Spain': ['Madrid Spain', 'Barcelona Spain', 'Seville Spain', 'Valencia Spain'],
+            'États-Unis': ['New York USA', 'Los Angeles USA', 'Chicago USA', 'San Francisco USA'],
+            'United States': ['New York USA', 'Los Angeles USA', 'Chicago USA', 'San Francisco USA'],
+            'Royaume-Uni': ['London UK', 'Edinburgh UK', 'Manchester UK', 'Liverpool UK'],
+            'United Kingdom': ['London UK', 'Edinburgh UK', 'Manchester UK', 'Liverpool UK'],
+            'Allemagne': ['Berlin Germany', 'Munich Germany', 'Hamburg Germany', 'Frankfurt Germany'],
+            'Germany': ['Berlin Germany', 'Munich Germany', 'Hamburg Germany', 'Frankfurt Germany'],
+        }
+        
+        cities = cities_by_country.get(country, [f"{country} attractions"])
+        all_results = []
+        seen_ids = set()
+        
+        # Faire des recherches multiples pour obtenir plus de résultats
+        for city_query in cities:
+            results = self.search_attractions_by_query(city_query)
+            for r in results:
+                location_id = r.get('location_id')
+                if location_id and location_id not in seen_ids:
+                    seen_ids.add(location_id)
+                    all_results.append(r)
+            
+            # Arrêter si on a assez de résultats
+            if len(all_results) >= limit:
+                break
+        
+        # Trier par rating et nombre d'avis
+        all_results.sort(
+            key=lambda x: (x.get('rating', 0), x.get('num_reviews', 0)),
+            reverse=True
+        )
+        
+        logger.info(f"✅ get_popular_attractions: {len(all_results)} attractions trouvées pour {country}")
+        return all_results[:limit]
     
     def get_attraction_by_id(self, location_id: str) -> Optional[Dict[str, Any]]:
         """

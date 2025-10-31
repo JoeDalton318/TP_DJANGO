@@ -1,15 +1,26 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.db import transaction
 from .models import UserProfile
+from .profile_logic import get_compilation_limit, get_profile_badge_info
 
 class UserProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
+    compilation_limit = serializers.SerializerMethodField()
+    badge_info = serializers.SerializerMethodField()
     
     class Meta:
         model = UserProfile
-        fields = ['id', 'username', 'email', 'profile_type', 'selected_country', 'preferences']
+        fields = ['id', 'username', 'email', 'profile_type', 'selected_country', 
+                  'preferences', 'compilation_limit', 'badge_info']
         read_only_fields = ['id']
+    
+    def get_compilation_limit(self, obj):
+        return get_compilation_limit(obj.profile_type)
+    
+    def get_badge_info(self, obj):
+        return get_profile_badge_info(obj.profile_type)
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -20,16 +31,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         model = User
         fields = ['username', 'email', 'password', 'profile_type', 'selected_country']
     
+    @transaction.atomic
     def create(self, validated_data):
         profile_type = validated_data.pop('profile_type')
         selected_country = validated_data.pop('selected_country')
         
+        # Créer l'utilisateur
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password']
         )
         
+        # Créer le profil immédiatement dans la même transaction
         UserProfile.objects.create(
             user=user,
             profile_type=profile_type,

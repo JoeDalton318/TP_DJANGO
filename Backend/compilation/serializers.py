@@ -3,9 +3,16 @@ from django.db.models import Sum
 from .models import Attraction, Compilation
 
 class AttractionSerializer(serializers.ModelSerializer):
+    main_image = serializers.SerializerMethodField()
+    
     class Meta:
         model = Attraction
         fields = '__all__'
+    
+    def get_main_image(self, obj):
+        """Retourner l'URL de l'image directement depuis TripAdvisor (pas de proxy nécessaire)"""
+        # Les images TripAdvisor sont publiques et accessibles directement
+        return obj.main_image or ""
 
 class CompilationSerializer(serializers.ModelSerializer):
     attractions = AttractionSerializer(many=True, read_only=True)

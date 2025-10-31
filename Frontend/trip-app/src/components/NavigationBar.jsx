@@ -53,9 +53,9 @@ const NavigationBar = () => {
                   <BookmarkCheck size={18} className="me-1" />
                   Ma Compilation
                 </Nav.Link>
-                <Nav.Link onClick={handleLogout}>
-                  <LogOut size={18} className="me-1" />
-                  Déconnexion
+                <Nav.Link onClick={() => navigate('/profile')} active={location.pathname === '/profile'}>
+                  <User size={18} className="me-1" />
+                  Profil
                 </Nav.Link>
               </Nav>
             </Navbar.Collapse>

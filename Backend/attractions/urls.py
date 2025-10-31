@@ -17,6 +17,7 @@ urlpatterns = [
     path('suggestions/', views.search_suggestions, name='suggestions'),
     path('categories/', views.categories, name='categories'),
     path('countries/', views.countries, name='countries'),
+    path('proxy-image/', views.proxy_image, name='proxy_image'),
     
     # Endpoints de test TripAdvisor
     path('test/tripadvisor/search/', views.test_tripadvisor_search, name='test_search'),
@@ -26,7 +27,10 @@ urlpatterns = [
     path('test/full-process/', views.test_full_process, name='test_full_process'),
     
     # Photos d'une attraction (avant le pattern générique)
-    path('photos/<str:location_id>/', views.AttractionPhotosView.as_view(), name='photos'),
+    path('<str:location_id>/photos/', views.AttractionPhotosView.as_view(), name='photos'),
+    
+    # Reviews d'une attraction (avant le pattern générique)
+    path('<str:location_id>/reviews/', views.AttractionReviewsView.as_view(), name='reviews'),
     
     # Détail d'une attraction (doit être en dernier)
     path('<str:tripadvisor_id>/', views.AttractionDetailView.as_view(), name='detail'),

@@ -10,6 +10,7 @@ from django.db.models import Q
 from .models import Compilation, Attraction
 from .serializers import CompilationSerializer, AttractionSerializer
 from attractions.tripadvisor_service import tripadvisor_service
+from users.profile_logic import get_compilation_limit
 
 User = get_user_model()
 
@@ -482,13 +483,28 @@ class CompilationViewSet(viewsets.ViewSet):
             compilation = self._get_or_create_compilation(request.user)
             attraction_id = request.data.get('attraction_id')
             
+            # Vérifier la limite selon le type de profil
+            profile = request.user.profile
+            limit = get_compilation_limit(profile.profile_type)
+            current_count = compilation.attractions.filter(is_active=True).count()
+            
+            if current_count >= limit:
+                return Response({
+                    'error': f'Limite atteinte pour votre profil ({limit} attractions maximum)',
+                    'limit': limit,
+                    'current_count': current_count,
+                    'profile_type': profile.profile_type
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             attraction = get_object_or_404(Attraction, pk=attraction_id)
             compilation.attractions.add(attraction)
             
             return Response({
                 'message': f'{attraction.name} ajouté à votre compilation',
                 'budget_total': compilation.calculate_total_budget(),
-                'total_distance': compilation.calculate_total_distance()
+                'total_distance': compilation.calculate_total_distance(),
+                'current_count': current_count + 1,
+                'limit': limit
             })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

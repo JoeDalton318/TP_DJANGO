@@ -262,7 +262,7 @@ const MapView = ({
                   {/* Image si disponible */}
                   {attraction.main_image && (
                     <img 
-                      src={attraction.main_image} 
+                      src={attraction.main_image}
                       alt={attraction.name}
                       style={{ 
                         width: '100%', 
@@ -272,6 +272,9 @@ const MapView = ({
                         border: '2px solid #dee2e6'
                       }}
                       className="mt-2"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
                     />
                   )}
                   

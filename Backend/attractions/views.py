@@ -30,7 +30,7 @@ class PopularAttractionsView(APIView):
         try:
             # Paramètres de la requête
             country = request.query_params.get('country', 'France').strip()
-            limit = min(int(request.query_params.get('limit', 10)), 20)
+            limit = min(int(request.query_params.get('limit', 30)), 50)
             page = int(request.query_params.get('page', 1))
             
             logger.info(f"🔍 Recherche attractions populaires: {country}, limit={limit}, page={page}")
@@ -93,7 +93,7 @@ class AttractionSearchView(APIView):
             
             # Paramètres de pagination
             page = max(int(request.query_params.get('page', 1)), 1)
-            limit = max(min(int(request.query_params.get('limit', 20)), 100), 1)  # Max 100, min 1
+            limit = max(min(int(request.query_params.get('limit', 30)), 100), 1)  # Max 100, min 1
             
             logger.info(f"🔍 AttractionSearchView - Paramètres reçus: query='{query}', country='{country}', filtres avancés actifs")
             
@@ -498,7 +498,7 @@ class AttractionNearbyView(APIView):
             radius = request.query_params.get('radius', '5')  # 5km par défaut
             category = request.query_params.get('category', '')
             page = max(int(request.query_params.get('page', 1)), 1)
-            limit = max(min(int(request.query_params.get('limit', 20)), 100), 1)
+            limit = max(min(int(request.query_params.get('limit', 30)), 100), 1)
             
             # Paramètres de filtres avancés
             min_rating = request.query_params.get('min_rating')
@@ -993,6 +993,43 @@ class AttractionPhotosView(APIView):
                 'error': f'Erreur lors de la récupération des photos: {str(e)}',
                 'location_id': location_id,
                 'photos': []
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class AttractionReviewsView(APIView):
+    """
+    API pour récupérer les reviews d'une attraction via TripAdvisor API
+    """
+    
+    def get(self, request, location_id):
+        try:
+            logger.info(f"🔍 Récupération reviews pour attraction: {location_id}")
+            
+            # Récupérer les reviews via TripAdvisor
+            result = tripadvisor_service.get_location_reviews(location_id, language="fr")
+            
+            if not result or not result.get('reviews'):
+                return Response({
+                    'error': 'Aucune review trouvée',
+                    'location_id': location_id,
+                    'reviews': [],
+                    'total_reviews': 0
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            logger.info(f"✅ {result['total_reviews']} reviews récupérées pour {location_id}")
+            
+            return Response({
+                'location_id': location_id,
+                'total_reviews': result['total_reviews'],
+                'reviews': result['reviews']
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur récupération reviews {location_id}: {str(e)}")
+            return Response({
+                'error': f'Erreur lors de la récupération des reviews: {str(e)}',
+                'location_id': location_id,
+                'reviews': [],
+                'total_reviews': 0
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class AttractionDetailView(APIView):

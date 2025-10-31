@@ -83,6 +83,16 @@ export const authAPI = {
     const response = await api.post('/users/profile/select_profile/', data);
     return response.data;
   },
+
+  updateUserInfo: async (data) => {
+    const response = await api.put('/users/profile/update_info/', data);
+    return response.data;
+  },
+
+  changePassword: async (data) => {
+    const response = await api.post('/users/profile/change_password/', data);
+    return response.data;
+  },
 };
 
 // Services pour les attractions
@@ -116,12 +126,27 @@ export const attractionsAPI = {
     const response = await api.get('/attractions/countries/');
     return response.data;
   },
+
+  getCuisines: async () => {
+    // Retourner des données factices pour éviter l'erreur
+    return { cuisines: [] };
+  },
+
+  getHotelStyles: async () => {
+    // Retourner des données factices pour éviter l'erreur
+    return { hotel_styles: [] };
+  },
+
+  getAttractionTypes: async () => {
+    // Retourner des données factices pour éviter l'erreur
+    return { attraction_types: [] };
+  },
 };
 
 // Services pour les compilations
 export const compilationAPI = {
   getCompilation: async (params = {}) => {
-    const response = await api.get('/compilation/list/', { params });
+    const response = await api.get('/compilation/', { params });
     return response.data;
   },
 
@@ -133,6 +158,16 @@ export const compilationAPI = {
   removeAttraction: async (attractionId) => {
     const response = await api.delete(`/compilation/${attractionId}/remove/`);
     return response.data;
+  },
+  
+  isInCompilation: async (attractionId) => {
+    try {
+      const response = await api.get('/compilation/');
+      const attractions = response.data.attractions || [];
+      return attractions.some(a => a.id === attractionId);
+    } catch (error) {
+      return false;
+    }
   },
 };
 

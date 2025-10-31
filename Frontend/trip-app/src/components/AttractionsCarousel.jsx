@@ -8,10 +8,9 @@ const AttractionsCarousel = ({ attractions, onAttractionClick }) => {
   }
 
   const getImageUrl = (attraction) => {
+    // Les images TripAdvisor sont publiques et accessibles directement
     if (attraction.main_image) {
-      return attraction.main_image.includes('tripadvisor.com')
-        ? `/api/attractions/proxy-image/?url=${encodeURIComponent(attraction.main_image)}`
-        : attraction.main_image;
+      return attraction.main_image;
     }
     return 'https://via.placeholder.com/800x400?text=Pas+d\'image';
   };

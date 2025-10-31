@@ -34,6 +34,7 @@ export default function HomePage() {
       const attractionsData = await attractionsAPI.getPopularAttractions({
         country: profileData.selected_country,
         page: 1,
+        limit: 15,
       });
 
       setPopularAttractions(attractionsData.results || []);
@@ -57,10 +58,11 @@ export default function HomePage() {
       setError(null);
       
       const data = query 
-        ? await attractionsAPI.searchAttractions({ q: query, page })
+        ? await attractionsAPI.searchAttractions({ q: query, page, limit: 15 })
         : await attractionsAPI.getPopularAttractions({ 
             country: profile?.selected_country, 
-            page 
+            page,
+            limit: 15
           });
       
       setPopularAttractions(data.results || []);
@@ -101,12 +103,33 @@ export default function HomePage() {
     <Container className="py-4">
       {/* En-tête avec profil */}
       <div className="mb-4">
-        <h1 className="display-4">
-          🌍 Bienvenue, {profile?.profile_type === 'tourist' ? 'voyageur' : profile?.profile_type === 'local' ? 'local' : 'professionnel'} !
-        </h1>
-        <p className="lead text-muted">
-          Découvrez les meilleures attractions en {profile?.selected_country}
-        </p>
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+          <div>
+            <h1 className="display-4 mb-2">
+              🌍 Bienvenue, {profile?.username || 'voyageur'} !
+            </h1>
+            <p className="lead text-muted mb-0">
+              Découvrez les meilleures attractions en {profile?.selected_country}
+            </p>
+          </div>
+          {profile?.badge_info && (
+            <div className="text-md-end">
+              <span className={`badge bg-${profile.badge_info.color} p-3`} style={{ fontSize: '1rem' }}>
+                {profile.badge_info.icon} {profile.badge_info.label}
+              </span>
+              <div className="mt-2">
+                <small className="text-muted">{profile.badge_info.description}</small>
+                {profile.compilation_limit && (
+                  <div className="mt-1">
+                    <small className="text-muted">
+                      📋 Limite compilation: <strong>{profile.compilation_limit}</strong> attractions
+                    </small>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -169,7 +192,7 @@ export default function HomePage() {
             </Alert>
           ) : (
             <>
-              <Row xs={1} md={2} lg={3} xl={4} className="g-4">
+              <Row xs={1} sm={2} md={2} lg={3} xl={4} className="g-3 g-md-4">
                 {popularAttractions.map((attraction) => (
                   <Col key={attraction.id} onClick={() => handleAttractionClick(attraction)}>
                     <AttractionCard attraction={attraction} />

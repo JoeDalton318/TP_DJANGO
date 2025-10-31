@@ -1,10 +1,21 @@
-# Python
+# ========================================
+# TRIP EXPLORER - Git Ignore
+# ========================================
+
+# ==========================================
+# Python / Django
+# ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
 
-# Environnements virtuels
+# Environnements virtuels Python
 .env
 .venv/
 env/
@@ -12,16 +23,26 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+trip-app-venv/
+*.virtualenv
 
-# Fichiers Django et données locales
+# Django
 *.log
+*.pot
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
 media/
 staticfiles/
+static/
 
-# Tests / coverage / cache
+# Migrations (optionnel - décommenter pour ignorer)
+# **/migrations/**
+# !**/migrations/__init__.py
+
+# ==========================================
+# Tests / Coverage / Cache
+# ==========================================
 htmlcov/
 .tox/
 .nox/
@@ -31,55 +52,160 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+*.py,cover
 .hypothesis/
 .pytest_cache/
 .mypy_cache/
 .pyre/
 .pytype/
+.dmypy.json
+dmypy.json
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
-.eggs/
-
-# --- Node / React ---
+# ==========================================
+# Node / React / Frontend
+# ==========================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-# Fichiers d'environnement frontend (locaux/temporaires)
+lerna-debug.log*
+
+# Environnement frontend
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-# Build React (create-react-app, Vite, etc.)
-build/
-dist/
-# Storybook / test artifacts
-storybook-static/
-coverage/
 
-# --- IDE / OS ---
+# Build frontend (Vite, Create React App, Next.js)
+dist/
+dist-ssr/
+build/
+.next/
+out/
+
+# Vite
+*.local
+.vite/
+
+# Tests frontend
+coverage/
+storybook-static/
+playwright-report/
+test-results/
+
+# ==========================================
+# IDE / Éditeurs
+# ==========================================
+# VS Code
 .vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ
 .idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
 *.sublime-project
 *.sublime-workspace
+
+# Eclipse
+.project
+.pydevproject
+.classpath
+.settings/
+
+# Vim
 *.swp
+*.swo
 *~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ==========================================
+# OS Files
+# ==========================================
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
 
-# --- Docker / CI ---
-.envrc
-docker-compose.override.yml
+# Linux
+.directory
+.Trash-*
+
+# ==========================================
+# Docker / Containers
+# ==========================================
 .docker/
+.dockerignore
+docker-compose.override.yml
+.envrc
 
-# --- Misc ---
-# clés, certificats, secrets
+# ==========================================
+# Security / Secrets
+# ==========================================
+# Clés API, certificats, secrets
 *.pem
 *.key
+*.crt
+*.cer
+.secrets/
+secrets.json
 
-# Ne pas ignorer intentionnellement : fichiers de lock (package-lock.json, yarn.lock) et migrations Django
-# (commitez vos migrations si nécessaire)
+# Variables d'environnement avec secrets
+.env.production
+.env.staging
+
+# ==========================================
+# Logs & Temporary Files
+# ==========================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+logs/
+tmp/
+temp/
+
+# ==========================================
+# Package Managers Locks
+# ==========================================
+# Garder les fichiers de lock pour la reproductibilité
+# Décommenter si nécessaire :
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+# poetry.lock
+# Pipfile.lock
+
+# ==========================================
+# Specific to this project
+# ==========================================
+# Scripts de nettoyage temporaires
+cleanup_user.py
+
+# Fichiers de données de test
+test_data/
+fixtures/local/
+
+# Fichiers uploadés en développement
+uploads/
+user_uploads/
