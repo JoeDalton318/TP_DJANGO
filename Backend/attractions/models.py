@@ -110,3 +110,34 @@ class Attraction(models.Model):
     @property
     def is_attraction(self):
         return self.category.lower() == 'attraction'
+
+
+class Award(models.Model):
+    # attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='awards')
+    attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, null=True, blank=True)
+    title = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.title} ({self.attraction.name})"
+
+
+class Photo(models.Model):
+
+
+    # attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='photos')
+    attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='photos', null=True, blank=True)
+    url = models.URLField()
+    
+
+    def __str__(self):
+        return f"Photo for {self.attraction.name}"
+
+
+class Suggestion(models.Model):
+    # attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='suggestions')
+    # suggested_attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='+')
+    attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='suggestions', null=True, blank=True)
+    suggested_attraction = models.ForeignKey(Attraction, on_delete=models.CASCADE, related_name='+', null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.attraction.name} → {self.suggested_attraction.name}"
